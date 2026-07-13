@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 
 public class Constraint {
+	private static final RepairActionCostModel DEFAULT_REPAIR_ACTION_COST_MODEL = RepairActionCostModel.standard();
 	private final AnalysisConstraint dslConstraint;
 	private EvaluationFunction evaluationFunction;
 	private final List<MitigationStrategy> mitigations;
@@ -67,6 +68,30 @@ public class Constraint {
 		this.evaluationFunction = evaluationFunction;
 	}
 
+	public Constraint copy() {
+		if (isCustomEvaluationFunction(evaluationFunction)) {
+			throw new UnsupportedOperationException(
+			 """
+			 Robust uncertainty-aware repair only supports DSL-backed constraints.
+			 Custom EvaluationFunction constraints are currently out of scope.
+			 """
+			);
+		}
+
+		List<MitigationStrategy> copiedMitigations = mitigations.stream()
+				.map(MitigationStrategy::copy)
+				.toList();
+
+		Constraint copy = dslConstraint != null ? new Constraint(dslConstraint, copiedMitigations)
+				: new Constraint(copiedMitigations);
+
+		for (CompositeLabel precondition : preconditionLabel) {
+			copy.addPrecondition(precondition);
+		}
+
+		return copy;
+	}
+
 	public List<MitigationStrategy> getMitigations() {
 		return new ArrayList<>(mitigations);
 	}
@@ -113,6 +138,15 @@ public class Constraint {
 		return evaluationFunction.evaluate(flowGraph);
 	}
 
+	private boolean isCustomEvaluationFunction(EvaluationFunction evaluationFunction) {
+		if (evaluationFunction == null) {
+			return false;
+		}
+
+		final Class<?> enclosingClass = evaluationFunction.getClass().getEnclosingClass();
+		return enclosingClass != null && enclosingClass != Constraint.class;
+	}
+
 	private Set<Node> getDSLViolations(DFDFlowGraphCollection flowGraph) {
 		Set<Node> violatingNodes = new HashSet<>();
 		List<DSLResult> results = this.dslConstraint.findViolations(flowGraph);
@@ -128,7 +162,7 @@ public class Constraint {
 	/***
 	 * This functions determines whether a Node matches the Antecedent of this
 	 * constraint.
-	 * 
+	 *
 	 * @param node
 	 * @return
 	 */
@@ -190,7 +224,7 @@ public class Constraint {
 					type = MitigationType.DataLabel;
 				}
 
-				mitigations.add(new MitigationStrategy(List.of(literal.compositeLabel()), 1, type));
+				mitigations.add(MitigationStrategy.withCostModel(List.of(literal.compositeLabel()), type, DEFAULT_REPAIR_ACTION_COST_MODEL));
 			} else {
 				var label = literal.compositeLabel().label().type() + "." + literal.compositeLabel().label().value();
 
@@ -203,7 +237,7 @@ public class Constraint {
 						type = MitigationType.DeleteDataLabel;
 					}
 
-					mitigations.add(new MitigationStrategy(List.of(literal.compositeLabel()), 1000, type));
+					mitigations.add(MitigationStrategy.withCostModel(List.of(literal.compositeLabel()), type, DEFAULT_REPAIR_ACTION_COST_MODEL));
 
 				}
 

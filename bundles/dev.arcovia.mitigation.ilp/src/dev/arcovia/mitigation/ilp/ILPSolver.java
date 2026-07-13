@@ -34,12 +34,7 @@ public class ILPSolver {
 
 	public List<Mitigation> solve(List<List<Mitigation>> mitigations, Set<Mitigation> allMitigations,
 			List<List<Mitigation>> contradictions) throws Exception {
-		try {
-			loadOrToolsNative();
-		} catch (IOException e) {
-			throw new Exception("Unable to load required libariers used by google orTools");
-
-		}
+		ensureNativeLibrariesLoaded();
 		MPSolver solver = MPSolver.createSolver("SCIP_MIXED_INTEGER_PROGRAMMING");
 
 		for (Mitigation mitigation : allMitigations) {
@@ -178,6 +173,14 @@ public class ILPSolver {
 	}
 
 	private static volatile boolean nativeLoaded = false;
+
+	public static void ensureNativeLibrariesLoaded() {
+		try {
+			loadOrToolsNative();
+		} catch (IOException e) {
+			throw new IllegalStateException("Unable to load required libraries used by google orTools", e);
+		}
+	}
 
 	private static synchronized void loadOrToolsNative() throws IOException {
 		if (nativeLoaded) {

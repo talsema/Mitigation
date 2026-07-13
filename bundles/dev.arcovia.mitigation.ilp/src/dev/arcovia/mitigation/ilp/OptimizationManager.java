@@ -242,7 +242,9 @@ public class OptimizationManager {
 	private void setAdditonalConstraints(MitigationStrategy mitigation) {
 		for (var constraint : constraints) {
 			for (var mit : constraint.getMitigations()) {
-				if (!mitigation.type.toString().startsWith("Delete") && mit.label.equals(mitigation.label)) {
+				// The delete-typed strategy is not allowed where another constraint's
+				// addition-typed strategy needs the same labels: compare the OTHER strategy.
+				if (!mit.type.toString().startsWith("Delete") && mit.label.equals(mitigation.label)) {
 					mitigation.addConstraint(constraint);
 				}
 			}
@@ -329,7 +331,7 @@ public class OptimizationManager {
 		}
 	}
 
-	private void applyActions(DataFlowDiagramAndDictionary dfd, List<ActionTerm> actions) {
+	protected void applyActions(DataFlowDiagramAndDictionary dfd, List<ActionTerm> actions) {
 		deriveOutPinsToAssignmentsMap(dfd);
 
 		addAndRemoveLabels(dfd, actions);
