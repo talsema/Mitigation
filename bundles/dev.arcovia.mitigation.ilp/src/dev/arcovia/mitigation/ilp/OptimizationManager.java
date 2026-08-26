@@ -1,10 +1,14 @@
 package dev.arcovia.mitigation.ilp;
 
+import dev.arcovia.mitigation.cost.ActionType;
+import dev.arcovia.mitigation.cost.ObjectiveCostBreakdown;
+import dev.arcovia.mitigation.cost.RepairCostSpecification;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -50,6 +54,8 @@ public class OptimizationManager {
 	private List<ActionTerm> actions;
 
 	private List<Mitigation> result;
+	private RepairCostSpecification repairCostSpecification = RepairCostSpecification.standardPreference();
+	private ObjectiveCostBreakdown objectiveCostBreakdown;
 
 	public OptimizationManager(String dfdLocation, List<AnalysisConstraint> constraints) {
 		this.dfd = new Web2DFDConverter().convert(new WebEditorConverterModel(dfdLocation));
@@ -101,7 +107,10 @@ public class OptimizationManager {
 		}
 
 		var solver = new ILPSolver();
-		result = solver.solve(mitigations, allMitigations, contradictions);
+		ILPSolverResult solverResult = solver.solveWithResult(mitigations, allMitigations, contradictions,
+				repairCostSpecification, dfd);
+		result = solverResult.selectedMitigations();
+		objectiveCostBreakdown = solverResult.costBreakdown();
 
 		actions = getActions(result);
 
@@ -131,7 +140,10 @@ public class OptimizationManager {
 		}
 
 		var solver = new ILPSolver();
-		result = solver.solve(mitigations, allMitigations, contradictions);
+		ILPSolverResult solverResult = solver.solveWithResult(mitigations, allMitigations, contradictions,
+				repairCostSpecification, dfd);
+		result = solverResult.selectedMitigations();
+		objectiveCostBreakdown = solverResult.costBreakdown();
 
 		timer.solving();
 
@@ -144,12 +156,55 @@ public class OptimizationManager {
 		return dfd;
 	}
 
+	/**
+	 * Sets the specification used by the next repair.
+	 *
+	 * @param repairCostSpecification the declared direct and shared repair costs
+	 */
+	public void setRepairCostSpecification(RepairCostSpecification repairCostSpecification) {
+		this.repairCostSpecification = java.util.Objects.requireNonNull(repairCostSpecification,
+				"repairCostSpecification must not be null");
+	}
+
+	/**
+	 * Returns the specification used by the next repair.
+	 *
+	 * @return the declared repair-cost specification
+	 */
+	public RepairCostSpecification getRepairCostSpecification() {
+		return repairCostSpecification;
+	}
+
+	/**
+	 * Returns the objective breakdown of the most recent repair.
+	 *
+	 * @return the completed objective breakdown, or empty before a successful repair
+	 */
+	public Optional<ObjectiveCostBreakdown> getObjectiveCostBreakdown() {
+		return Optional.ofNullable(objectiveCostBreakdown);
+	}
+
+	/**
+	 * Returns the objective value of the most recent repair.
+	 *
+	 * @return the declared \(J_\Theta\) value
+	 * @throws IllegalStateException if no repair has completed
+	 */
+	public double getObjectiveValue() {
+		return getObjectiveCostBreakdown().orElseThrow(
+				() -> new IllegalStateException("No repair objective is available before a successful repair"))
+				.objectiveValue();
+	}
+
+	/**
+	 * Returns the legacy integer projection of the objective value.
+	 *
+	 * @return the truncated legacy total
+	 * @deprecated use {@link #getObjectiveValue()} instead
+	 */
+	@Deprecated
 	public int getCost() {
-		int cost = 0;
-		for (var mitigation : result) {
-			cost += mitigation.cost();
-		}
-		return cost;
+		return (int) getObjectiveValue();
 	}
 
 	public boolean isViolationFree(DataFlowDiagramAndDictionary dfd) {
@@ -815,11 +870,8 @@ public class OptimizationManager {
 	}
 
 	private void deriveOutPinsToAssignmentsMap(DataFlowDiagramAndDictionary dfd) {
-		for (var node : dfd.dataFlowDiagram().getNodes()) {
-			for (var assignment : node.getBehavior().getAssignment()) {
-				var outPin = assignment.getOutputPin();
-				outPinToAssignmentMap.put(outPin.getId(), assignment.getId());
-			}
-		}
+		dfd.dataFlowDiagram().getNodes().stream()
+				.flatMap(n -> n.getBehavior().getAssignment().stream())
+				.forEach(a -> outPinToAssignmentMap.put(a.getOutputPin().getId(), a.getId()));
 	}
 }

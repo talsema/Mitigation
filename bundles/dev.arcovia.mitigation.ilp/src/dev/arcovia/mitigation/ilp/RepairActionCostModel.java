@@ -1,5 +1,6 @@
 package dev.arcovia.mitigation.ilp;
 
+import dev.arcovia.mitigation.cost.RepairCostSpecification;
 import dev.arcovia.mitigation.sat.CompositeLabel;
 
 import java.util.EnumMap;
@@ -8,6 +9,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.ToDoubleBiFunction;
 
+/**
+ * Legacy candidate-score model retained while stage 4 is migrated.
+ *
+ * @deprecated Solver objectives use {@link RepairCostSpecification}.
+ */
+@Deprecated
 public final class RepairActionCostModel {
     private final EnumMap<MitigationType, Double> baseCosts;
     private final ToDoubleBiFunction<MitigationType, Integer> costFunction;

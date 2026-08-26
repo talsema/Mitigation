@@ -1,0 +1,10 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Cost
+Bundle-SymbolicName: dev.arcovia.mitigation.cost
+Bundle-Version: 1.0.0.qualifier
+Export-Package: dev.arcovia.mitigation.cost
+Require-Bundle: org.dataflowanalysis.converter,
+ org.dataflowanalysis.dfd.dataflowdiagram
+Automatic-Module-Name: dev.arcovia.mitigation.cost
+Bundle-RequiredExecutionEnvironment: JavaSE-17

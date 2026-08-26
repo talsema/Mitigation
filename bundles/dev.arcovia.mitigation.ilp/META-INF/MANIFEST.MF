@@ -3,17 +3,23 @@ Bundle-ManifestVersion: 2
 Bundle-Name: Ilp
 Bundle-SymbolicName: dev.arcovia.mitigation.ilp
 Bundle-Version: 1.0.0.qualifier
-Export-Package: 
+Export-Package: com.google.ortools,
+ com.google.ortools.linearsolver,
  dev.arcovia.mitigation.ilp
-Import-Package: org.osgi.framework
+Import-Package: dev.arcovia.mitigation.ilp,
+ org.osgi.framework
 Require-Bundle: org.dataflowanalysis.converter,
+ dev.arcovia.mitigation.cost,
  org.apache.log4j,
  org.dataflowanalysis.analysis,
  org.dataflowanalysis.analysis.dfd,
  org.dataflowanalysis.dfd.datadictionary,
  org.dataflowanalysis.dfd.dataflowdiagram,
  dev.arcovia.mitigation.sat,
- com.sun.jna
+ com.sun.jna,
+ dev.abunai.confidentiality.analysis.model,
+ dev.abunai.confidentiality.analysis,
+ dev.arcovia.mitigation.ranking
 Automatic-Module-Name: dev.arcovia.mitigation.ilp
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-ClassPath: .,
