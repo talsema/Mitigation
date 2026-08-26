@@ -1,21 +1,18 @@
 package dev.arcovia.mitigation.uncertainty.solving;
 
 import com.google.ortools.linearsolver.MPConstraint;
-import com.google.ortools.linearsolver.MPObjective;
 import com.google.ortools.linearsolver.MPSolver;
 import com.google.ortools.linearsolver.MPVariable;
-import dev.arcovia.mitigation.ilp.ActionTerm;
-import dev.arcovia.mitigation.ilp.ActionType;
-import dev.arcovia.mitigation.ilp.ILPSolver;
-import dev.arcovia.mitigation.ilp.Mitigation;
+import dev.arcovia.mitigation.cost.*;
+import dev.arcovia.mitigation.ilp.*;
 import dev.arcovia.mitigation.sat.LabelCategory;
 import dev.arcovia.mitigation.uncertainty.preparation.RepairPreparationResult;
 import dev.arcovia.mitigation.uncertainty.solving.UncertaintyControlledLabelDetector.ControlledLabelKey;
 import org.apache.log4j.Logger;
+import org.dataflowanalysis.converter.dfd2web.DataFlowDiagramAndDictionary;
 import org.eclipse.jdt.annotation.NonNull;
 
 import java.util.*;
-import java.util.function.BinaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -25,6 +22,11 @@ import java.util.stream.IntStream;
 public final class RobustILPSolver {
 
     private static final Logger LOGGER = Logger.getLogger(RobustILPSolver.class);
+
+    /**
+     * Action types the solver may select; empty means every type is available.
+     */
+    private Set<ActionType> allowedActionTypes = Set.of();
 
     /**
      * Solves one joint robust-repair ILP and excludes removals that scenario materialization would undo.
@@ -39,8 +41,62 @@ public final class RobustILPSolver {
     public RobustSolverResult solveWithResult(@NonNull List<RepairPreparationResult> scenarioPreparations,
                                               @NonNull Set<ControlledLabelKey> forbiddenLabels)
             throws NoRobustRepairExistsException {
+        return solveWithResult(scenarioPreparations, forbiddenLabels,
+                RepairCostSpecification.standardPreference(), null);
+    }
+
+    /**
+     * Solves one joint robust-repair ILP restricted to a declared action vocabulary.
+     * <p>
+     * Restriction clamps the variable of every action outside the vocabulary to zero, which is
+     * exact. Pricing such an action at a very large cost would leave it selectable and would put a
+     * numerically hostile coefficient in the objective, so it is not used. A coverage set whose
+     * every member lies outside the vocabulary therefore becomes infeasible and is reported as
+     * such, which is the honest answer for a vocabulary that cannot repair the model.
+     *
+     * @param scenarioPreparations the non-empty stage-4 preparations for all considered scenarios
+     * @param forbiddenLabels      alternative-injected labels that must not be removed
+     * @param costSpecification    the direct and shared repair costs
+     * @param baseModel            the unrepaired model used for action descriptors
+     * @param allowedActionTypes   the action types the solver may select; an empty set allows all
+     * @return the selected canonical mitigations, solver statistics, and objective breakdown
+     * @throws NoRobustRepairExistsException if no feasible repair exists within the vocabulary
+     */
+    public RobustSolverResult solveWithResult(@NonNull List<RepairPreparationResult> scenarioPreparations,
+                                              @NonNull Set<ControlledLabelKey> forbiddenLabels,
+                                              @NonNull RepairCostSpecification costSpecification,
+                                              DataFlowDiagramAndDictionary baseModel,
+                                              @NonNull Set<ActionType> allowedActionTypes)
+            throws NoRobustRepairExistsException {
+        Objects.requireNonNull(allowedActionTypes, "allowedActionTypes must not be null");
+        this.allowedActionTypes = Set.copyOf(allowedActionTypes);
+        try {
+            return solveWithResult(scenarioPreparations, forbiddenLabels, costSpecification, baseModel);
+        } finally {
+            this.allowedActionTypes = Set.of();
+        }
+    }
+
+    /**
+     * Solves one joint robust-repair ILP with a declared thesis cost specification.
+     *
+     * @param scenarioPreparations the non-empty stage-4 preparations for all considered scenarios
+     * @param forbiddenLabels      alternative-injected labels that must not be removed
+     * @param costSpecification    the direct and shared repair costs
+     * @param baseModel            the unrepaired model used for action descriptors
+     * @return the selected canonical mitigations, solver statistics, and objective breakdown
+     * @throws IllegalArgumentException      if the preparations are empty or a required descriptor is unavailable
+     * @throws NoRobustRepairExistsException if no feasible robust repair exists
+     * @throws IllegalStateException         if SCIP cannot be created
+     */
+    public RobustSolverResult solveWithResult(@NonNull List<RepairPreparationResult> scenarioPreparations,
+                                              @NonNull Set<ControlledLabelKey> forbiddenLabels,
+                                              @NonNull RepairCostSpecification costSpecification,
+                                              DataFlowDiagramAndDictionary baseModel)
+            throws NoRobustRepairExistsException {
         Objects.requireNonNull(scenarioPreparations, "scenarioPreparations must not be null");
         Objects.requireNonNull(forbiddenLabels, "forbiddenLabels must not be null");
+        Objects.requireNonNull(costSpecification, "costSpecification must not be null");
         if (scenarioPreparations.isEmpty()) {
             throw new IllegalArgumentException("scenarioPreparations must not be empty");
         }
@@ -61,9 +117,10 @@ public final class RobustILPSolver {
         addContradictionConstraints(solver, mitigationVariables, scenarioPreparations);
         addRequiredConstraints(solver, mitigationVariables, scenarioPreparations);
 
-        MPObjective objective = solver.objective();
-        canonicalMitigations.forEach((key, value) -> objective.setCoefficient(mitigationVariables.get(key), value.cost()));
-        objective.setMinimization();
+        Map<RepairActionKey, ActionCostDescriptor> actionCosts = new ActionCostEvaluator()
+                .evaluateAll(mitigationVariables.keySet(), costSpecification, baseModel);
+        CostObjectiveEncoder.ConfiguredObjective configuredObjective = new CostObjectiveEncoder()
+                .configure(solver, mitigationVariables, costSpecification, actionCosts);
 
         MPSolver.ResultStatus status = solver.solve();
         if (status != MPSolver.ResultStatus.OPTIMAL && status != MPSolver.ResultStatus.FEASIBLE) {
@@ -82,11 +139,11 @@ public final class RobustILPSolver {
                 .map(canonicalMitigations::get)
                 .toList();
         return new RobustSolverResult(selectedMitigations, status.name(),
-                solver.numVariables(), solver.numConstraints());
+                solver.numVariables(), solver.numConstraints(), configuredObjective.selectedCostBreakdown());
     }
 
     /**
-     * Keeps the lowest-cost mitigation for each action key.
+     * Keeps the first scenario representative for each action key.
      *
      * @param scenarioPreparations the preparations to collect from
      * @return canonical actions indexed by key
@@ -97,7 +154,7 @@ public final class RobustILPSolver {
                 .collect(Collectors.toMap(
                         this::actionKey,
                         mitigation -> mitigation,
-                        BinaryOperator.minBy(Comparator.comparingDouble(Mitigation::cost)),
+                        (first, ignored) -> first,
                         TreeMap::new
                 ));
     }
@@ -119,7 +176,8 @@ public final class RobustILPSolver {
             // coverage / contradiction / required references remain valid), but the solver
             // cannot select it. A coverage set consisting only of forbidden actions therefore
             // becomes infeasible, surfacing as NoRobustRepairExistsException.
-            double upperBound = isForbidden(entry.getValue().mitigation(), forbiddenLabels) ? 0 : 1;
+            double upperBound = isForbidden(entry.getValue().mitigation(), forbiddenLabels)
+                                || isOutsideVocabulary(entry.getValue().mitigation()) ? 0 : 1;
             mitigationVariables.put(entry.getKey(),
                     solver.makeIntVar(0, upperBound, "x_" + i + "_" + safeName(entry.getKey().stableId())));
             i++;
@@ -128,12 +186,15 @@ public final class RobustILPSolver {
     }
 
     /**
-     * Checks whether an action removes an alternative-injected label.
+     * Reports whether an action lies outside the declared vocabulary.
      *
-     * @param action          the candidate action
-     * @param forbiddenLabels labels that cannot be removed
-     * @return {@code true} when the action is forbidden
+     * @param action the candidate action
+     * @return {@code true} when a vocabulary is declared and does not contain the action's type
      */
+    private boolean isOutsideVocabulary(ActionTerm action) {
+        return !allowedActionTypes.isEmpty() && !allowedActionTypes.contains(action.type());
+    }
+
     private boolean isForbidden(ActionTerm action, Set<ControlledLabelKey> forbiddenLabels) {
         if (forbiddenLabels.isEmpty() || action.type() != ActionType.Removing) {
             return false;
@@ -287,7 +348,7 @@ public final class RobustILPSolver {
      * @return its action key
      */
     private RepairActionKey actionKey(Mitigation mitigation) {
-        return RepairActionKey.from(mitigation);
+        return RepairActionKeys.from(mitigation);
     }
 
     /**

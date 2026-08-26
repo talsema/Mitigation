@@ -15,6 +15,7 @@ Export-Package: dev.arcovia.mitigation.uncertainty,
  dev.arcovia.mitigation.uncertainty.validation
 Import-Package: org.osgi.framework
 Require-Bundle: dev.arcovia.mitigation.ilp,
+ dev.arcovia.mitigation.cost,
  dev.arcovia.mitigation.sat,
  dev.arcovia.mitigation.ranking,
  dev.abunai.confidentiality.analysis,

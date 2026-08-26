@@ -3,6 +3,7 @@ package dev.arcovia.mitigation.uncertainty.output;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import dev.arcovia.mitigation.cost.ObjectiveCostBreakdown;
 import dev.arcovia.mitigation.ilp.ActionTerm;
 import dev.arcovia.mitigation.uncertainty.RobustRepairResult;
 import org.eclipse.jdt.annotation.NonNull;
@@ -68,7 +69,7 @@ final class RobustRepairOutputWriter {
      * @return the report JSON, or {@code {}} when serialization fails
      */
     private String toJson(RobustRepairResult result, RepairOutputArtifacts artifacts, List<RepairTraceStep> traceSteps) {
-        final Object o = new Result("arcovia-robust-repair-report-v1", result, artifacts, traceSteps);
+        final Object o = new Result("arcovia-robust-repair-report-v2", result, artifacts, traceSteps);
         final ObjectWriter objectWriter = new ObjectMapper().writer().withDefaultPrettyPrinter();
         try {
             return objectWriter.writeValueAsString(o);
@@ -89,6 +90,8 @@ final class RobustRepairOutputWriter {
             String validationStatus,
             boolean validationPassed,
             double totalCost,
+            double objectiveValue,
+            ObjectiveCostBreakdown costBreakdown,
             int preRepairViolationCount,
             int postRepairViolationCount,
             int consideredScenarioCount,
@@ -114,7 +117,9 @@ final class RobustRepairOutputWriter {
                     result.solverStatus(),
                     result.validationStatus().name(),
                     result.validationPassed(),
-                    result.totalCost(),
+                    result.objectiveValue(),
+                    result.objectiveValue(),
+                    result.costBreakdown(),
                     result.preRepairViolationCount(),
                     result.postRepairViolationCount(),
                     result.consideredScenarioCount(),

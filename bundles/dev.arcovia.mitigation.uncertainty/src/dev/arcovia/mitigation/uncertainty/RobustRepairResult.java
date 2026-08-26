@@ -1,5 +1,6 @@
 package dev.arcovia.mitigation.uncertainty;
 
+import dev.arcovia.mitigation.cost.ObjectiveCostBreakdown;
 import dev.arcovia.mitigation.ilp.ActionTerm;
 import org.dataflowanalysis.converter.dfd2web.DataFlowDiagramAndDictionary;
 import org.eclipse.jdt.annotation.NonNull;
@@ -12,7 +13,8 @@ import java.util.Objects;
  *
  * @param repairedModel            the repaired base model
  * @param selectedActions          the applied actions
- * @param totalCost                the total action cost
+ * @param totalCost                the legacy total-cost alias for the objective value
+ * @param costBreakdown            the selected direct and shared cost components
  * @param consideredScenarioIds    the considered scenario identifiers
  * @param preRepairViolationCount  the number of violations before repair
  * @param postRepairViolationCount the number of violations after repair
@@ -23,6 +25,7 @@ public record RobustRepairResult(
         @NonNull DataFlowDiagramAndDictionary repairedModel,
         @NonNull List<ActionTerm> selectedActions,
         double totalCost,
+        @NonNull ObjectiveCostBreakdown costBreakdown,
         @NonNull List<String> consideredScenarioIds,
         int preRepairViolationCount,
         int postRepairViolationCount,
@@ -34,7 +37,8 @@ public record RobustRepairResult(
      *
      * @param repairedModel            the repaired base model
      * @param selectedActions          the applied action terms
-     * @param totalCost                the non-negative total action cost
+     * @param totalCost                the final objective value
+     * @param costBreakdown            the selected cost components
      * @param consideredScenarioIds    the scenario identifiers considered during repair
      * @param preRepairViolationCount  the non-negative count before repair
      * @param postRepairViolationCount the non-negative count after repair
@@ -45,8 +49,12 @@ public record RobustRepairResult(
     public RobustRepairResult {
         Objects.requireNonNull(repairedModel, "repairedModel must not be null");
         selectedActions = List.copyOf(Objects.requireNonNull(selectedActions, "selectedActions must not be null"));
-        if (totalCost < 0) {
-            throw new IllegalArgumentException("totalCost must not be negative");
+        if (!Double.isFinite(totalCost) || totalCost < 0) {
+            throw new IllegalArgumentException("totalCost must be finite and non-negative");
+        }
+        costBreakdown = Objects.requireNonNull(costBreakdown, "costBreakdown must not be null");
+        if (Math.abs(totalCost - costBreakdown.objectiveValue()) > 1e-9) {
+            throw new IllegalArgumentException("totalCost must equal costBreakdown objectiveValue");
         }
         consideredScenarioIds = List.copyOf(
                 Objects.requireNonNull(consideredScenarioIds, "consideredScenarioIds must not be null"));
@@ -58,6 +66,47 @@ public record RobustRepairResult(
         }
         solverStatus = Objects.requireNonNull(solverStatus, "solverStatus must not be null");
         validationStatus = Objects.requireNonNull(validationStatus, "validationStatus must not be null");
+    }
+
+    /**
+     * Creates a compatibility result with an action-only cost breakdown.
+     *
+     * @param repairedModel            the repaired base model
+     * @param selectedActions          the applied actions
+     * @param totalCost                the legacy total cost
+     * @param consideredScenarioIds    the considered scenario identifiers
+     * @param preRepairViolationCount  the violations before repair
+     * @param postRepairViolationCount the violations after repair
+     * @param solverStatus             the solver status
+     * @param validationStatus         the validation outcome
+     */
+    public RobustRepairResult(DataFlowDiagramAndDictionary repairedModel, List<ActionTerm> selectedActions,
+                              double totalCost, List<String> consideredScenarioIds,
+                              int preRepairViolationCount, int postRepairViolationCount,
+                              String solverStatus, ValidationStatus validationStatus) {
+        this(repairedModel, selectedActions, totalCost, ObjectiveCostBreakdown.legacy(totalCost),
+                consideredScenarioIds, preRepairViolationCount, postRepairViolationCount,
+                solverStatus, validationStatus);
+    }
+
+    /**
+     * Returns the declared final objective value.
+     *
+     * @return \(J_\Theta\) for the selected plan
+     */
+    public double objectiveValue() {
+        return costBreakdown.objectiveValue();
+    }
+
+    /**
+     * Returns the legacy objective alias.
+     *
+     * @return the final objective value
+     * @deprecated use {@link #objectiveValue()} or {@link #costBreakdown()} instead
+     */
+    @Deprecated
+    public double totalCost() {
+        return totalCost;
     }
 
     /**

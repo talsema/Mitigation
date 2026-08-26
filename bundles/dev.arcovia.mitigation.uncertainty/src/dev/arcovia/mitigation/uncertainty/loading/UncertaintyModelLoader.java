@@ -3,16 +3,21 @@ package dev.arcovia.mitigation.uncertainty.loading;
 import dev.abunai.confidentiality.analysis.core.UncertaintySourceManager;
 import dev.abunai.confidentiality.analysis.core.UncertaintySourceType;
 import dev.abunai.confidentiality.analysis.dfd.DFDUncertaintyResourceProvider;
+import dev.abunai.confidentiality.analysis.model.uncertainty.UncertaintySource;
+import org.apache.log4j.Logger;
 import org.dataflowanalysis.converter.dfd2web.DataFlowDiagramAndDictionary;
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.jdt.annotation.NonNull;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
  * Loads one uncertainty-annotated model. Pipeline stage 1.
  */
 public final class UncertaintyModelLoader {
+
+    private static final Logger LOGGER = Logger.getLogger(UncertaintyModelLoader.class);
 
     /**
      * Loads and validates the resources described by {@code spec}.
@@ -34,9 +39,11 @@ public final class UncertaintyModelLoader {
                 provider.getUncertaintySourceCollection(),
                 UncertaintySourceType.DFD);
 
+        var sources = sourceManager.getUncertaintySources();
+
         return new LoadedUncertaintyModel(
                 new DataFlowDiagramAndDictionary(provider.getDataFlowDiagram(), provider.getDataDictionary()),
-                sourceManager.getUncertaintySources()
+                sources
         );
     }
 }

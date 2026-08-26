@@ -21,7 +21,20 @@ import java.util.Objects;
 public final class ScenarioPreparationService {
     private final ScenarioCombinationGenerator combinationGenerator = new ScenarioCombinationGenerator();
     private final ScenarioMaterializer materializer = new ScenarioMaterializer();
-    private final RepairPreparationService repairPreparationService = new RepairPreparationService();
+    private final RepairPreparationService repairPreparationService;
+
+    /** Creates a service that refuses cyclic models. */
+    public ScenarioPreparationService() {
+        this(false);
+    }
+
+    /**
+     * @param allowCyclic whether to prepare cyclic models instead of rejecting them; results
+     *                    obtained this way must be reported as a separate stratum
+     */
+    public ScenarioPreparationService(boolean allowCyclic) {
+        this.repairPreparationService = new RepairPreparationService(allowCyclic);
+    }
 
     /**
      * Prepares all combinations of selected sources from a loaded model.
@@ -53,28 +66,63 @@ public final class ScenarioPreparationService {
             @NonNull List<UncertaintySource> selectedSources,
             @NonNull List<Constraint> constraints
     ) {
+        return prepare(baseModel, selectedSources, constraints, PipelineTiming.none());
+    }
+
+    /**
+     * Prepares all selected scenarios while reporting the stage boundaries.
+     *
+     * @param baseModel       the model to materialize
+     * @param selectedSources the sources to combine
+     * @param constraints     the repair constraints
+     * @param timing          the optional stage timing sink
+     * @return one preparation per scenario, or one base preparation when no source is selected
+     */
+    public List<ScenarioPreparation> prepare(
+            @NonNull DataFlowDiagramAndDictionary baseModel,
+            @NonNull List<UncertaintySource> selectedSources,
+            @NonNull List<Constraint> constraints,
+            @NonNull PipelineTiming timing
+    ) {
         Objects.requireNonNull(baseModel, "baseModel must not be null");
         Objects.requireNonNull(selectedSources, "selectedSources must not be null");
         Objects.requireNonNull(constraints, "constraints must not be null");
+        Objects.requireNonNull(timing, "timing must not be null");
 
         if (selectedSources.isEmpty()) {
             MaterializedScenario baseScenario = new MaterializedScenario("base", baseModel, List.of());
-            return List.of(new ScenarioPreparation(baseScenario, repairPreparationService.prepare(baseModel, constraints)));
+            timing.start(PipelineStage.PREPARATION);
+            try {
+                return List.of(new ScenarioPreparation(baseScenario, repairPreparationService.prepare(baseModel, constraints)));
+            } finally {
+                timing.stop(PipelineStage.PREPARATION);
+            }
         }
 
-        List<List<ScenarioSelection>> combinations = combinationGenerator.generate(selectedSources);
-        List<ScenarioPreparation> preparedScenarios = new ArrayList<>(combinations.size());
-        preparedScenarios.add(prepareScenario(baseModel, combinations.get(0), constraints));
-        preparedScenarios.addAll(combinations.subList(1, combinations.size()).parallelStream()
-                .map(combination -> prepareScenario(baseModel, combination, constraints))
-                .toList());
-        return preparedScenarios;
+        timing.start(PipelineStage.ENUMERATION);
+        List<List<ScenarioSelection>> combinations;
+        try {
+            combinations = combinationGenerator.generate(selectedSources);
+        } finally {
+            timing.stop(PipelineStage.ENUMERATION);
+        }
+        timing.start(PipelineStage.PREPARATION);
+        try {
+            List<ScenarioPreparation> preparedScenarios = new ArrayList<>(combinations.size());
+            preparedScenarios.add(prepareScenario(baseModel, combinations.get(0), constraints));
+            preparedScenarios.addAll(combinations.subList(1, combinations.size()).parallelStream()
+                    .map(combination -> prepareScenario(baseModel, combination, constraints))
+                    .toList());
+            return preparedScenarios;
+        } finally {
+            timing.stop(PipelineStage.PREPARATION);
+        }
     }
 
     /**
      * Materializes one enumerated selection and derives its stage-4 repair input.
      *
-     * @param baseModel   the unmaterialized model from which to derive the scenario
+     * @param baseModel the unmaterialized model from which to derive the scenario
      * @param combination the selections that identify the scenario
      * @param constraints the repair constraints to prepare against the scenario
      * @return the materialized scenario paired with its repair preparation

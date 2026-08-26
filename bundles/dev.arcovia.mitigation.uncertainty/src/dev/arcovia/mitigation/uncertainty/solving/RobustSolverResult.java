@@ -1,5 +1,6 @@
 package dev.arcovia.mitigation.uncertainty.solving;
 
+import dev.arcovia.mitigation.cost.ObjectiveCostBreakdown;
 import dev.arcovia.mitigation.ilp.Mitigation;
 import org.eclipse.jdt.annotation.NonNull;
 
@@ -13,12 +14,14 @@ import java.util.Objects;
  * @param solverStatus        the solver status
  * @param variableCount       the number of solver variables
  * @param constraintCount     the number of solver constraints
+ * @param costBreakdown       the selected direct and shared objective costs
  */
 public record RobustSolverResult(
         @NonNull List<Mitigation> selectedMitigations,
         @NonNull String solverStatus,
         int variableCount,
-        int constraintCount
+        int constraintCount,
+        @NonNull ObjectiveCostBreakdown costBreakdown
 ) {
     /**
      * Validates the solver result and snapshots the selected actions.
@@ -27,6 +30,7 @@ public record RobustSolverResult(
      * @param solverStatus        the solver status string
      * @param variableCount       the non-negative number of solver variables
      * @param constraintCount     the non-negative number of solver constraints
+     * @param costBreakdown       the selected objective-cost breakdown
      * @throws IllegalArgumentException if a count is negative
      */
     public RobustSolverResult {
@@ -40,5 +44,29 @@ public record RobustSolverResult(
         if (constraintCount < 0) {
             throw new IllegalArgumentException("constraintCount must not be negative");
         }
+        costBreakdown = Objects.requireNonNull(costBreakdown, "costBreakdown must not be null");
+    }
+
+    /**
+     * Creates a compatibility result from an action-only total.
+     *
+     * @param selectedMitigations the selected canonical mitigations
+     * @param solverStatus        the solver status string
+     * @param variableCount       the non-negative number of solver variables
+     * @param constraintCount     the non-negative number of solver constraints
+     */
+    public RobustSolverResult(List<Mitigation> selectedMitigations, String solverStatus, int variableCount,
+                              int constraintCount) {
+        this(selectedMitigations, solverStatus, variableCount, constraintCount,
+                ObjectiveCostBreakdown.legacy(selectedMitigations.stream().mapToDouble(Mitigation::cost).sum()));
+    }
+
+    /**
+     * Returns the selected objective value.
+     *
+     * @return the declared \(J_\Theta\) value
+     */
+    public double objectiveValue() {
+        return costBreakdown.objectiveValue();
     }
 }

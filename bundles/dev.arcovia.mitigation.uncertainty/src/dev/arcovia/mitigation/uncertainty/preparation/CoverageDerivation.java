@@ -1,8 +1,9 @@
 package dev.arcovia.mitigation.uncertainty.preparation;
 
+import dev.arcovia.mitigation.cost.RepairActionKey;
 import dev.arcovia.mitigation.ilp.Mitigation;
 import dev.arcovia.mitigation.ilp.Node;
-import dev.arcovia.mitigation.uncertainty.solving.RepairActionKey;
+import dev.arcovia.mitigation.ilp.RepairActionKeys;
 import org.eclipse.jdt.annotation.NonNull;
 
 import java.util.*;
@@ -32,7 +33,7 @@ public final class CoverageDerivation {
 
         List<Mitigation> coverageAlternatives = mitigationCandidates.stream()
                 .map(this::canonicalize)
-                .sorted(Comparator.comparing(RepairActionKey::from))
+                .sorted(Comparator.comparing(RepairActionKeys::from))
                 .collect(Collectors.toCollection(ArrayList::new));
         coverageSets.add(coverageAlternatives);
 
@@ -49,7 +50,7 @@ public final class CoverageDerivation {
     public List<List<Mitigation>> coverageSets() {
         List<List<Mitigation>> sorted = new ArrayList<>(coverageSets);
         sorted.sort(Comparator.comparing(coverage -> coverage.stream()
-                .map(mitigation -> RepairActionKey.from(mitigation).stableId())
+                .map(mitigation -> RepairActionKeys.from(mitigation).stableId())
                 .collect(Collectors.joining(","))));
         return sorted;
     }
@@ -79,7 +80,7 @@ public final class CoverageDerivation {
      * @return the canonical mitigation
      */
     private Mitigation canonicalize(Mitigation mitigation) {
-        RepairActionKey key = RepairActionKey.from(mitigation);
+        RepairActionKey key = RepairActionKeys.from(mitigation);
         canonicalMitigations.merge(key, mitigation, CHEAPER_MITIGATION);
         return canonicalMitigations.get(key);
     }
@@ -91,7 +92,7 @@ public final class CoverageDerivation {
      */
     private void recordContributorRecursively(Mitigation mitigation) {
         canonicalize(mitigation);
-        String contributorKey = RepairActionKey.from(mitigation).stableId() + "#" + requiredSignature(mitigation);
+        String contributorKey = RepairActionKeys.from(mitigation).stableId() + "#" + requiredSignature(mitigation);
         contributorMitigations.merge(contributorKey, mitigation, CHEAPER_MITIGATION);
         mitigation.required().stream()
                 .flatMap(List::stream)
@@ -107,7 +108,7 @@ public final class CoverageDerivation {
     private String requiredSignature(Mitigation mitigation) {
         return mitigation.required().stream()
                 .map(clause -> clause.stream()
-                        .map(child -> RepairActionKey.from(child).stableId())
+                        .map(child -> RepairActionKeys.from(child).stableId())
                         .sorted()
                         .collect(Collectors.joining("&")))
                 .sorted()

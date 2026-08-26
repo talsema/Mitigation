@@ -1,6 +1,6 @@
 package dev.arcovia.mitigation.uncertainty.preparation;
 
-import dev.arcovia.mitigation.ilp.ActionType;
+import dev.arcovia.mitigation.cost.ActionType;
 import dev.arcovia.mitigation.ilp.Mitigation;
 import dev.arcovia.mitigation.sat.CompositeLabel;
 import org.eclipse.jdt.annotation.NonNull;

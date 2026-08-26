@@ -1,22 +1,25 @@
 package dev.arcovia.mitigation.uncertainty;
 
 import dev.abunai.confidentiality.analysis.model.uncertainty.UncertaintySource;
-import dev.arcovia.mitigation.ilp.ActionTerm;
-import dev.arcovia.mitigation.ilp.Constraint;
-import dev.arcovia.mitigation.ilp.Mitigation;
-import dev.arcovia.mitigation.ilp.OptimizationManager;
+import dev.arcovia.mitigation.cost.ObjectiveCostBreakdown;
+import dev.arcovia.mitigation.ilp.*;
 import dev.arcovia.mitigation.sat.timeMeasurement;
 import dev.arcovia.mitigation.uncertainty.RobustRepairResult.ValidationStatus;
 import dev.arcovia.mitigation.uncertainty.loading.LoadedUncertaintyModel;
 import dev.arcovia.mitigation.uncertainty.loading.UncertaintyModelLoader;
 import dev.arcovia.mitigation.uncertainty.loading.UncertaintyModelSpec;
 import dev.arcovia.mitigation.uncertainty.output.RepairOutput;
+import dev.arcovia.mitigation.uncertainty.pipeline.PipelineStage;
+import dev.arcovia.mitigation.uncertainty.pipeline.PipelineTiming;
 import dev.arcovia.mitigation.uncertainty.pipeline.ScenarioPreparation;
 import dev.arcovia.mitigation.uncertainty.pipeline.ScenarioPreparationService;
 import dev.arcovia.mitigation.uncertainty.pruning.ClusterCouplingGuard;
 import dev.arcovia.mitigation.uncertainty.pruning.SourceImpactFilter;
 import dev.arcovia.mitigation.uncertainty.pruning.SourcePartitioner;
-import dev.arcovia.mitigation.uncertainty.solving.*;
+import dev.arcovia.mitigation.uncertainty.solving.NoRobustRepairExistsException;
+import dev.arcovia.mitigation.uncertainty.solving.RobustILPSolver;
+import dev.arcovia.mitigation.uncertainty.solving.RobustSolverResult;
+import dev.arcovia.mitigation.uncertainty.solving.UncertaintyControlledLabelDetector;
 import dev.arcovia.mitigation.uncertainty.validation.RobustRepairValidationException;
 import dev.arcovia.mitigation.uncertainty.validation.RobustRepairValidationResult;
 import dev.arcovia.mitigation.uncertainty.validation.RobustRepairValidator;
@@ -44,6 +47,8 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
     private final List<UncertaintySource> selectedUncertaintySources;
     private final List<Constraint> configuredConstraints;
     private final DataFlowDiagramAndDictionary uncertaintyBaseModel;
+    private boolean impactPruningEnabled = true;
+    private boolean cyclicModelsAllowed;
     private boolean partitioningEnabled = true;
     private List<Mitigation> robustResult = List.of();
     private boolean robustRepairExecuted = false;
@@ -228,6 +233,28 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
     }
 
     /**
+     * Toggles A1 impact pruning (default on).
+     *
+     * @param impactPruningEnabled {@code true} to remove sources that cannot affect a constraint
+     */
+    public void setImpactPruningEnabled(boolean impactPruningEnabled) {
+        this.impactPruningEnabled = impactPruningEnabled;
+    }
+
+    /**
+     * Allows the repair to analyse cyclic models (default off).
+     * <p>
+     * Transpose flow graph extraction unrolls cycles heuristically, so the default refuses such
+     * models. A caller that enables this accepts the heuristic and takes on the obligation to
+     * report the results as a stratum of their own, separate from acyclic results.
+     *
+     * @param cyclicModelsAllowed {@code true} to analyse cyclic models instead of rejecting them
+     */
+    public void setCyclicModelsAllowed(boolean cyclicModelsAllowed) {
+        this.cyclicModelsAllowed = cyclicModelsAllowed;
+    }
+
+    /**
      * Executes the robust repair pipeline of the Approach chapter. Stage 1 (loading) has
      * already happened in the constructor; this method runs stages 2--7 in order, each
      * delegated to the component of the corresponding pipeline package.
@@ -237,6 +264,20 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
      * @throws Exception if solving, applying, or validation fails
      */
     private DataFlowDiagramAndDictionary repairLoadedUncertainty(timeMeasurement timer) throws Exception {
+        return repairLoadedUncertainty(timer, PipelineTiming.none());
+    }
+
+    /**
+     * Runs stages 2--7 and reports each stage boundary to an optional timing sink.
+     *
+     * @param timer          the legacy timing recorder, or {@code null}
+     * @param pipelineTiming the stage timing sink
+     * @return the repaired base model after successful validation
+     * @throws Exception if solving, applying, or validation fails
+     */
+    private DataFlowDiagramAndDictionary repairLoadedUncertainty(timeMeasurement timer,
+                                                                 PipelineTiming pipelineTiming) throws Exception {
+        Objects.requireNonNull(pipelineTiming, "pipelineTiming must not be null");
         RepairOutput output = repairOutput;
         output.record("start-robust-repair", () -> "selectedSources=" + selectedUncertaintySources.size()
                                                    + ", constraints=" + configuredConstraints.size());
@@ -248,8 +289,10 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
         // so the Cartesian product (and the post-repair validation) is taken only over relevant
         // sources. The SAME pruned set must feed both preparation and validation, or validation would
         // re-introduce scenarios the repair never considered.
-        List<UncertaintySource> relevantSources = new SourceImpactFilter()
-                .retainImpactful(loadedUncertaintyModel.baseModel(), selectedUncertaintySources);
+        List<UncertaintySource> relevantSources = impactPruningEnabled
+                ? new SourceImpactFilter().retainImpactful(
+                loadedUncertaintyModel.baseModel(), selectedUncertaintySources)
+                : selectedUncertaintySources;
         output.record("prune-sources", () -> "selectedSources=" + selectedUncertaintySources.size()
                                              + ", relevantSources=" + relevantSources.size());
 
@@ -262,14 +305,16 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
         // union of scenarios (∑ 2^{n_i}) instead of the full product (∏ 2^{Σ n_i}). The shared
         // RepairActionKey variables compose the per-cluster plans automatically. Any coupling, or a
         // single cluster, falls back to the whole-set solve -- byte-identical to the pre-A2 behavior.
-        ScenarioPreparationService scenarioPreparationService = new ScenarioPreparationService();
+        ScenarioPreparationService scenarioPreparationService =
+                new ScenarioPreparationService(cyclicModelsAllowed);
         RobustRepairValidator repairValidator = new RobustRepairValidator(scenarioPreparationService);
 
         List<List<UncertaintySource>> clusters = partitioningEnabled
                 ? new SourcePartitioner().partition(uncertaintyBaseModel, relevantSources)
                 : List.of(relevantSources);
         List<List<ScenarioPreparation>> perClusterPreparations = clusters.stream()
-                .map(cluster -> scenarioPreparationService.prepare(uncertaintyBaseModel, cluster, configuredConstraints))
+                .map(cluster -> scenarioPreparationService.prepare(
+                        uncertaintyBaseModel, cluster, configuredConstraints, pipelineTiming))
                 .toList();
         boolean decomposed = clusters.size() > 1 && new ClusterCouplingGuard().isSafeToDecompose(
                 perClusterPreparations.stream()
@@ -279,11 +324,11 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
         List<ScenarioPreparation> scenarioPreparations = decomposed
                 ? perClusterPreparations.stream().flatMap(List::stream).toList()
                 : clusters.size() == 1
-                  ? perClusterPreparations.get(0)
-                  : scenarioPreparationService.prepare(uncertaintyBaseModel, relevantSources, configuredConstraints);
-        boolean decomposedFinal = decomposed;
+                ? perClusterPreparations.get(0)
+                : scenarioPreparationService.prepare(
+                uncertaintyBaseModel, relevantSources, configuredConstraints, pipelineTiming);
         output.record("partition-sources", () -> "clusters=" + clusters.size()
-                                                 + ", decomposed=" + decomposedFinal
+                                                 + ", decomposed=" + decomposed
                                                  + ", scenariosConsidered=" + scenarioPreparations.size());
         int preRepairViolationCount = repairValidator.fromPreparations(scenarioPreparations).totalViolationCount();
         List<String> consideredScenarioIds = scenarioPreparations.stream()
@@ -300,10 +345,16 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
         }
 
         // Stage 5 -- solve the joint ILP over all scenario preparations.
-        RobustSolverResult solverResult = solveJointIlp(scenarioPreparations, output);
+        pipelineTiming.start(PipelineStage.SOLVING);
+        RobustSolverResult solverResult;
+        try {
+            solverResult = solveJointIlp(scenarioPreparations, output);
+        } finally {
+            pipelineTiming.stop(PipelineStage.SOLVING);
+        }
         robustResult = solverResult.selectedMitigations();
         robustRepairExecuted = true;
-        double totalCost = robustResult.stream().mapToDouble(Mitigation::cost).sum();
+        double totalCost = solverResult.objectiveValue();
         output.record("solve-robust-ilp-completed", () -> "solverStatus=" + solverResult.solverStatus()
                                                           + ", selectedActions=" + robustResult.size()
                                                           + ", totalCost=" + totalCost);
@@ -317,16 +368,29 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
                 .toList();
         output.record("apply-selected-actions", () -> "actionCount=" + selectedActions.size()
                                                       + ", actions=" + selectedActions);
-        DataFlowDiagramAndDictionary repairedModel = applyToRepairedCopy(selectedActions);
+        pipelineTiming.start(PipelineStage.APPLICATION);
+        DataFlowDiagramAndDictionary repairedModel;
+        try {
+            repairedModel = applyToRepairedCopy(selectedActions);
+        } finally {
+            pipelineTiming.stop(PipelineStage.APPLICATION);
+        }
 
         // Stage 7 -- validate the repaired model. When the sources were decomposed, each cluster is
         // validated over its own scenario sub-space; because the clusters are independent, per-cluster
         // validity implies global validity (∑ ⇒ ∏). A single cluster validates over the full product.
         output.record("validate-repaired-model", () -> "scenarioCount=" + consideredScenarioIds.size());
-        List<ScenarioPreparation> postRepairPreparations = clustersUsed.stream()
-                .flatMap(cluster -> scenarioPreparationService.prepare(repairedModel, cluster, configuredConstraints).stream())
-                .toList();
-        RobustRepairValidationResult postRepairValidation = repairValidator.fromPreparations(postRepairPreparations);
+        pipelineTiming.start(PipelineStage.VALIDATION);
+        RobustRepairValidationResult postRepairValidation;
+        try {
+            List<ScenarioPreparation> postRepairPreparations = clustersUsed.stream()
+                    .flatMap(cluster -> scenarioPreparationService.prepare(
+                            repairedModel, cluster, configuredConstraints).stream())
+                    .toList();
+            postRepairValidation = repairValidator.fromPreparations(postRepairPreparations);
+        } finally {
+            pipelineTiming.stop(PipelineStage.VALIDATION);
+        }
         ValidationStatus validationStatus = postRepairValidation.passed()
                 ? ValidationStatus.PASSED
                 : ValidationStatus.FAILED;
@@ -337,6 +401,7 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
                 repairedModel,
                 selectedActions,
                 totalCost,
+                solverResult.costBreakdown(),
                 consideredScenarioIds,
                 preRepairViolationCount,
                 postRepairValidation.totalViolationCount(),
@@ -373,7 +438,7 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
                                                 + ", forbiddenControlledLabels=" + forbiddenLabels.size());
         return new RobustILPSolver().solveWithResult(scenarioPreparations.stream()
                 .map(ScenarioPreparation::preparation)
-                .toList(), forbiddenLabels);
+                .toList(), forbiddenLabels, getRepairCostSpecification(), uncertaintyBaseModel);
     }
 
     /**
@@ -417,7 +482,7 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
     private int countCandidateActions(List<ScenarioPreparation> scenarioPreparations) {
         return (int) scenarioPreparations.stream()
                 .flatMap(scenarioPreparation -> scenarioPreparation.preparation().allMitigations().stream())
-                .map(RepairActionKey::from)
+                .map(RepairActionKeys::from)
                 .distinct()
                 .count();
     }
@@ -437,17 +502,17 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
 
 
     /**
-     * Returns the cost of the latest robust repair or delegates to the baseline cost otherwise.
+     * Returns the latest robust objective breakdown or the baseline breakdown.
      *
-     * @return the integer cost reported by the active repair path
+     * @return the active repair's objective breakdown, or empty before repair
      */
     @Override
-    public int getCost() {
-        if (robustRepairExecuted) {
-            return (int) robustResult.stream().mapToDouble(Mitigation::cost).sum();
-        }
-        return super.getCost();
+    public Optional<ObjectiveCostBreakdown> getObjectiveCostBreakdown() {
+        return robustRepairExecuted
+                ? Optional.of(robustRepairResult.costBreakdown())
+                : super.getObjectiveCostBreakdown();
     }
+
 
     /**
      * Repairs the configured model using the robust pipeline when uncertainty is present.
@@ -476,6 +541,20 @@ public class UncertaintyAwareOptimizationManager extends OptimizationManager {
             return repairLoadedUncertainty(timer);
         }
         return super.repair(timer);
+    }
+
+    /**
+     * Repairs the configured uncertainty model and reports the stage boundaries.
+     *
+     * @param pipelineTiming the stage timing sink
+     * @return the repaired model
+     * @throws Exception if the selected repair path fails
+     */
+    public DataFlowDiagramAndDictionary repair(@NonNull PipelineTiming pipelineTiming) throws Exception {
+        if (hasLoadedUncertaintyModel()) {
+            return repairLoadedUncertainty(null, pipelineTiming);
+        }
+        return super.repair();
     }
 
 }

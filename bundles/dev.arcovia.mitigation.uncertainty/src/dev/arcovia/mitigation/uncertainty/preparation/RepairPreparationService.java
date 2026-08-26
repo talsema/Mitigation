@@ -16,8 +16,21 @@ import java.util.Set;
 public final class RepairPreparationService {
 
     private final ConstraintPreparation constraintPreparation = new ConstraintPreparation();
-    private final ViolationAnalysis violationAnalysis = new ViolationAnalysis();
+    private final ViolationAnalysis violationAnalysis;
     private final ContradictionDerivation contradictionDerivation = new ContradictionDerivation();
+
+    /** Creates a service that refuses cyclic models. */
+    public RepairPreparationService() {
+        this(false);
+    }
+
+    /**
+     * @param allowCyclic whether to prepare cyclic models instead of rejecting them; results
+     *                    obtained this way must be reported as a separate stratum
+     */
+    public RepairPreparationService(boolean allowCyclic) {
+        this.violationAnalysis = new ViolationAnalysis(allowCyclic);
+    }
 
     /**
      * Derives violations, repair alternatives, and conflicts for one model.
@@ -32,7 +45,8 @@ public final class RepairPreparationService {
         Objects.requireNonNull(constraints, "constraints must not be null");
 
         List<Constraint> preparedConstraints = constraintPreparation.prepare(constraints);
-        Set<Node> violatingNodes = violationAnalysis.findViolatingNodes(dfd, preparedConstraints);
+        ViolationAnalysis.Reading reading = violationAnalysis.analyze(dfd, preparedConstraints);
+        Set<Node> violatingNodes = reading.violatingNodes();
 
         CoverageDerivation coverageDerivation = new CoverageDerivation();
         violatingNodes.forEach(coverageDerivation::deriveFor);
@@ -45,6 +59,7 @@ public final class RepairPreparationService {
                 violatingNodes,
                 coverageDerivation.coverageSets(),
                 coverageDerivation.contributorMitigations(),
-                contradictions);
+                contradictions,
+                reading.cyclic());
     }
 }
