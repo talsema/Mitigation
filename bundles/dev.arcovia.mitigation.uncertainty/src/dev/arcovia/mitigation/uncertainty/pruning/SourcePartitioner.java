@@ -3,6 +3,7 @@ package dev.arcovia.mitigation.uncertainty.pruning;
 import dev.abunai.confidentiality.analysis.dfd.DFDQueryHelper;
 import dev.abunai.confidentiality.analysis.model.uncertainty.UncertaintySource;
 import dev.abunai.confidentiality.analysis.model.uncertainty.dfd.DFDUncertaintySource;
+import org.apache.log4j.Logger;
 import org.dataflowanalysis.analysis.dfd.DFDDataFlowAnalysisBuilder;
 import org.dataflowanalysis.analysis.dfd.resource.DFDModelResourceProvider;
 import org.dataflowanalysis.converter.dfd2web.DataFlowDiagramAndDictionary;
@@ -14,6 +15,8 @@ import java.util.*;
  * Groups sources that share a base-model transpose flow graph.
  */
 public final class SourcePartitioner {
+
+    private static final Logger LOGGER = Logger.getLogger(SourcePartitioner.class);
 
     /**
      * Partitions sources by shared base-model flow graphs.
@@ -30,6 +33,13 @@ public final class SourcePartitioner {
         Objects.requireNonNull(sources, "sources must not be null");
         if (sources.isEmpty()) {
             return List.of();
+        }
+        if (TopologyEffect.anyChangesTopology(sources)) {
+            LOGGER.info("independence decomposition disabled: at least one of the " + sources.size()
+                        + " sources rewires the diagram, so two sources that share no base-model "
+                        + "transpose flow graph may still interact after materialization. "
+                        + "Solving over the undecomposed space.");
+            return List.of(List.copyOf(sources));
         }
 
         int[] parent = newUnionFind(sources.size());

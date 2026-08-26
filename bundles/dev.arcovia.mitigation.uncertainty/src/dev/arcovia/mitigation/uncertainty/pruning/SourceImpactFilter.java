@@ -35,6 +35,13 @@ public final class SourceImpactFilter {
         if (selectedSources.isEmpty()) {
             return List.of();
         }
+        if (TopologyEffect.anyChangesTopology(selectedSources)) {
+            LOGGER.info("impact pruning disabled: " + selectedSources.size()
+                        + " selected sources include at least one that rewires the diagram, so a node "
+                        + "that lies on no base-model transpose flow graph may become reachable in an "
+                        + "alternative scenario. All sources are retained.");
+            return List.copyOf(selectedSources);
+        }
 
         DFDQueryHelper queryHelper = new DFDQueryHelper(baseModelVertices(baseModel));
         List<UncertaintySource> impactful = selectedSources.stream()
