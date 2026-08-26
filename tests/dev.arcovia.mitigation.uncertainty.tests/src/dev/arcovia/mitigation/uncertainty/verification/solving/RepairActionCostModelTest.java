@@ -1,4 +1,4 @@
-package dev.arcovia.mitigation.uncertainty.solving;
+package dev.arcovia.mitigation.uncertainty.verification.solving;
 
 import dev.arcovia.mitigation.ilp.MitigationStrategy;
 import dev.arcovia.mitigation.ilp.MitigationType;

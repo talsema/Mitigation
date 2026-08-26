@@ -1,7 +1,9 @@
-package dev.arcovia.mitigation.uncertainty.output;
+package dev.arcovia.mitigation.uncertainty.verification.output;
 
+import dev.arcovia.mitigation.uncertainty.output.RepairOutput;
+
+import dev.arcovia.mitigation.cost.ActionType;
 import dev.arcovia.mitigation.ilp.ActionTerm;
-import dev.arcovia.mitigation.ilp.ActionType;
 import dev.arcovia.mitigation.sat.Label;
 import dev.arcovia.mitigation.sat.NodeLabel;
 import dev.arcovia.mitigation.uncertainty.RobustRepairResult;
@@ -50,10 +52,12 @@ class RobustRepairOutputWriterTest {
         assertTrue(Files.exists(report));
 
         String compact = Files.readString(report).replaceAll("\\s+", "");
-        assertTrue(compact.contains("\"schema\":\"arcovia-robust-repair-report-v1\""));
+        assertTrue(compact.contains("\"schema\":\"arcovia-robust-repair-report-v2\""));
         assertTrue(compact.contains("\"validationStatus\":\"PASSED\""));
         assertTrue(compact.contains("\"solverStatus\":\"OPTIMAL\""));
         assertTrue(compact.contains("\"selectedActions\""));
+        assertTrue(compact.contains("\"objectiveValue\":1.0"));
+        assertTrue(compact.contains("\"costBreakdown\""));
         assertTrue(compact.contains("\"trace\""));
         assertTrue(compact.contains("\"prepare-scenarios\""));
         assertEquals(outputDirectory.resolve("robust-repair-repair-report.json").toAbsolutePath().normalize(),

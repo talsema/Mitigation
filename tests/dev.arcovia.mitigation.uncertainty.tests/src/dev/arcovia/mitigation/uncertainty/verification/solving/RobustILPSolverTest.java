@@ -1,5 +1,12 @@
-package dev.arcovia.mitigation.uncertainty.solving;
+package dev.arcovia.mitigation.uncertainty.verification.solving;
 
+import dev.arcovia.mitigation.uncertainty.solving.NoRobustRepairExistsException;
+import dev.arcovia.mitigation.uncertainty.solving.RobustILPSolver;
+import dev.arcovia.mitigation.uncertainty.solving.RobustSolverResult;
+
+import dev.arcovia.mitigation.cost.ActionType;
+import dev.arcovia.mitigation.cost.RepairCostSpecification;
+import dev.arcovia.mitigation.cost.SharedCostGroup;
 import dev.arcovia.mitigation.ilp.*;
 import dev.arcovia.mitigation.sat.Label;
 import dev.arcovia.mitigation.sat.NodeLabel;
@@ -58,11 +65,16 @@ class RobustILPSolverTest {
                 List.of(duplicateLowCost),
                 List.of());
 
-        List<Mitigation> chosen = new RobustILPSolver().solveWithResult(List.of(scenarioA, scenarioB), Set.of()).selectedMitigations();
+        RepairCostSpecification specification = RepairCostSpecification.builder("canonical-cost", "1")
+                .withBaseCost(ActionType.Adding, 7.0)
+                .build();
+        RobustSolverResult result = new RobustILPSolver()
+                .solveWithResult(List.of(scenarioA, scenarioB), Set.of(), specification, null);
+        List<Mitigation> chosen = result.selectedMitigations();
 
         assertEquals(1, chosen.size());
-        assertEquals(1.0, chosen.stream().mapToDouble(Mitigation::cost).sum(), 0.0001,
-                "Duplicate semantic actions must be represented by one canonical variable with deterministic cost");
+        assertEquals(7.0, result.objectiveValue(), 0.0001,
+                "Canonical actions must use their declared descriptor cost, never a scenario candidate score");
     }
 
     @Test
@@ -155,13 +167,88 @@ class RobustILPSolverTest {
                 List.of(cheap, expensive),
                 List.of());
 
-        List<Mitigation> chosen = new RobustILPSolver().solveWithResult(List.of(scenario), Set.of()).selectedMitigations();
+        RepairCostSpecification specification = RepairCostSpecification.builder("alternative-costs", "1")
+                .withActionCostOverride(RepairActionKeys.from(cheap), 1.0)
+                .withActionCostOverride(RepairActionKeys.from(expensive), 5.0)
+                .build();
+        List<Mitigation> chosen = new RobustILPSolver()
+                .solveWithResult(List.of(scenario), Set.of(), specification, null)
+                .selectedMitigations();
 
         assertEquals(1, chosen.size(), "Exactly one mitigation should be selected");
         assertEquals("node-cheap", chosen.get(0).mitigation().domain(),
                 "Solver must prefer the cheaper mitigation (cost 1.0 over 5.0)");
         assertEquals(1.0, chosen.stream().mapToDouble(Mitigation::cost).sum(), 0.0001,
                 "Total cost of chosen mitigations must equal the cheaper option");
+    }
+
+    @Test
+    void chargesOneSharedEnablerForTwoSelectedActions() throws Exception {
+        Mitigation first = mitigation("node-1", "Encrypted", "true", 99.0, List.of());
+        Mitigation second = mitigation("node-2", "Encrypted", "true", 99.0, List.of());
+        RepairCostSpecification specification = RepairCostSpecification.builder("shared-enabler", "1")
+                .withBaseCost(ActionType.Adding, 1.0)
+                .withSharedCostGroup(new SharedCostGroup("key-management", 5.0,
+                        Set.of(RepairActionKeys.from(first), RepairActionKeys.from(second))))
+                .build();
+        RepairPreparationResult scenario = new RepairPreparationResult(
+                List.of(), Set.of(), List.of(List.of(first), List.of(second)), List.of(first, second), List.of());
+
+        RobustSolverResult result = new RobustILPSolver()
+                .solveWithResult(List.of(scenario), Set.of(), specification, null);
+
+        assertEquals(2, result.selectedMitigations().size());
+        assertEquals(2.0, result.costBreakdown().directActionCost());
+        assertEquals(5.0, result.costBreakdown().sharedEnablerCost());
+        assertEquals(7.0, result.objectiveValue());
+        assertEquals(List.of("key-management"), result.costBreakdown().selectedSharedCostGroupIds());
+    }
+
+    @Test
+    void doesNotChargeAnUnusedSharedEnabler() throws Exception {
+        Mitigation selected = mitigation("node-1", "Encrypted", "true", 99.0, List.of());
+        Mitigation unavailableMember = mitigation("node-2", "Encrypted", "true", 99.0, List.of());
+        RepairCostSpecification specification = RepairCostSpecification.builder("unused-enabler", "1")
+                .withBaseCost(ActionType.Adding, 1.0)
+                .withSharedCostGroup(new SharedCostGroup("key-management", 5.0,
+                        Set.of(RepairActionKeys.from(unavailableMember))))
+                .build();
+        RepairPreparationResult scenario = new RepairPreparationResult(
+                List.of(), Set.of(), List.of(List.of(selected)), List.of(selected), List.of());
+
+        RobustSolverResult result = new RobustILPSolver()
+                .solveWithResult(List.of(scenario), Set.of(), specification, null);
+
+        assertEquals(1.0, result.objectiveValue());
+        assertEquals(0.0, result.costBreakdown().sharedEnablerCost());
+        assertTrue(result.costBreakdown().selectedSharedCostGroupIds().isEmpty());
+    }
+
+    @Test
+    void selectsTheThesisRetailProfileAlternatives() throws Exception {
+        Mitigation encrypt = mitigation("encrypt", "Encrypted", "true", 99.0, List.of());
+        Mitigation remove = mitigation("remove", "Telemetry", "optional", ActionType.Removing, 99.0, List.of());
+        RepairPreparationResult scenario = new RepairPreparationResult(
+                List.of(), Set.of(), List.of(List.of(encrypt, remove)), List.of(encrypt, remove), List.of());
+
+        assertRetailProfile(scenario, encrypt, remove, 1, 4, "encrypt", 1);
+        assertRetailProfile(scenario, encrypt, remove, 20, 6, "remove", 6);
+        assertRetailProfile(scenario, encrypt, remove, 5, 6, "encrypt", 5);
+    }
+
+    private void assertRetailProfile(RepairPreparationResult scenario, Mitigation encrypt, Mitigation remove,
+                                     double encryptCost, double removeCost, String expectedDomain,
+                                     double expectedObjective) throws Exception {
+        RepairCostSpecification specification = RepairCostSpecification.builder("retail", "1")
+                .withActionCostOverride(RepairActionKeys.from(encrypt), encryptCost)
+                .withActionCostOverride(RepairActionKeys.from(remove), removeCost)
+                .build();
+
+        RobustSolverResult result = new RobustILPSolver()
+                .solveWithResult(List.of(scenario), Set.of(), specification, null);
+
+        assertEquals(expectedDomain, result.selectedMitigations().get(0).mitigation().domain());
+        assertEquals(expectedObjective, result.objectiveValue());
     }
 
     @Test

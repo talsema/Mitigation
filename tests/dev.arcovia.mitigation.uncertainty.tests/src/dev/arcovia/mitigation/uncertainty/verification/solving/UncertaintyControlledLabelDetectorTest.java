@@ -1,5 +1,7 @@
-package dev.arcovia.mitigation.uncertainty.solving;
+package dev.arcovia.mitigation.uncertainty.verification.solving;
 
+import dev.arcovia.mitigation.uncertainty.solving.UncertaintyControlledLabelDetector;
+import dev.arcovia.mitigation.uncertainty.solving.UncertaintyControlledLabelDetector;
 import dev.arcovia.mitigation.uncertainty.solving.UncertaintyControlledLabelDetector.ControlledLabelKey;
 import org.dataflowanalysis.converter.dfd2web.DataFlowDiagramAndDictionary;
 import org.dataflowanalysis.dfd.datadictionary.DataDictionary;

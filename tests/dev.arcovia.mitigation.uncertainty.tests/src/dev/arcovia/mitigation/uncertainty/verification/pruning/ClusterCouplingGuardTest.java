@@ -1,7 +1,9 @@
-package dev.arcovia.mitigation.uncertainty.pruning;
+package dev.arcovia.mitigation.uncertainty.verification.pruning;
 
+import dev.arcovia.mitigation.uncertainty.pruning.ClusterCouplingGuard;
+
+import dev.arcovia.mitigation.cost.ActionType;
 import dev.arcovia.mitigation.ilp.ActionTerm;
-import dev.arcovia.mitigation.ilp.ActionType;
 import dev.arcovia.mitigation.ilp.Mitigation;
 import dev.arcovia.mitigation.uncertainty.preparation.RepairPreparationResult;
 import org.junit.jupiter.api.Test;

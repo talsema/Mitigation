@@ -1,4 +1,6 @@
-package dev.arcovia.mitigation.uncertainty.pruning;
+package dev.arcovia.mitigation.uncertainty.verification.pruning;
+
+import dev.arcovia.mitigation.uncertainty.pruning.SourceImpactFilter;
 
 import dev.arcovia.mitigation.uncertainty.loading.LoadedUncertaintyModel;
 import dev.arcovia.mitigation.uncertainty.loading.UncertaintyModelLoader;

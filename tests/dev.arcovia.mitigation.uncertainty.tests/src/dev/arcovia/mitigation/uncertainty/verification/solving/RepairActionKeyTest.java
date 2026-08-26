@@ -1,7 +1,9 @@
-package dev.arcovia.mitigation.uncertainty.solving;
+package dev.arcovia.mitigation.uncertainty.verification.solving;
 
+import dev.arcovia.mitigation.cost.ActionType;
+import dev.arcovia.mitigation.cost.RepairActionKey;
 import dev.arcovia.mitigation.ilp.ActionTerm;
-import dev.arcovia.mitigation.ilp.ActionType;
+import dev.arcovia.mitigation.ilp.RepairActionKeys;
 import dev.arcovia.mitigation.sat.Label;
 import dev.arcovia.mitigation.sat.NodeLabel;
 import dev.arcovia.mitigation.sat.OutgoingDataLabel;
@@ -16,11 +18,11 @@ class RepairActionKeyTest {
 
     @Test
     public void usesActionDomainTypeAndLabelSemantics() {
-        RepairActionKey first = RepairActionKey.from(new ActionTerm(
+        RepairActionKey first = RepairActionKeys.from(new ActionTerm(
                 "database",
                 List.of(new NodeLabel(new Label("Location", "EU"))),
                 ActionType.Adding));
-        RepairActionKey equivalent = RepairActionKey.from(new ActionTerm(
+        RepairActionKey equivalent = RepairActionKeys.from(new ActionTerm(
                 "database",
                 List.of(new NodeLabel(new Label("Location", "EU"))),
                 ActionType.Adding));
@@ -32,11 +34,11 @@ class RepairActionKeyTest {
 
     @Test
     public void distinguishesNodeLabelsFromOutgoingDataLabels() {
-        RepairActionKey nodeLabelAction = RepairActionKey.from(new ActionTerm(
+        RepairActionKey nodeLabelAction = RepairActionKeys.from(new ActionTerm(
                 "database",
                 List.of(new NodeLabel(new Label("Location", "EU"))),
                 ActionType.Adding));
-        RepairActionKey dataLabelAction = RepairActionKey.from(new ActionTerm(
+        RepairActionKey dataLabelAction = RepairActionKeys.from(new ActionTerm(
                 "database",
                 List.of(new OutgoingDataLabel(new Label("Location", "EU"))),
                 ActionType.Adding));
@@ -46,13 +48,13 @@ class RepairActionKeyTest {
 
     @Test
     public void preservesLabelOrderBecauseStructuralActionsUseTheFirstLabelAsElementName() {
-        RepairActionKey firstOrder = RepairActionKey.from(new ActionTerm(
+        RepairActionKey firstOrder = RepairActionKeys.from(new ActionTerm(
                 "flow",
                 List.of(
                         new NodeLabel(new Label("Stereotype", "Firewall")),
                         new OutgoingDataLabel(new Label("Sensitivity", "Personal"))),
                 ActionType.AddNode));
-        RepairActionKey secondOrder = RepairActionKey.from(new ActionTerm(
+        RepairActionKey secondOrder = RepairActionKeys.from(new ActionTerm(
                 "flow",
                 List.of(
                         new OutgoingDataLabel(new Label("Sensitivity", "Personal")),

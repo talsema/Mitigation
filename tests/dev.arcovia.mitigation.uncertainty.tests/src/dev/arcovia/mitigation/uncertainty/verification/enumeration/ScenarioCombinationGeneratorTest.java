@@ -1,4 +1,7 @@
-package dev.arcovia.mitigation.uncertainty.enumeration;
+package dev.arcovia.mitigation.uncertainty.verification.enumeration;
+
+import dev.arcovia.mitigation.uncertainty.enumeration.ScenarioCombinationGenerator;
+import dev.arcovia.mitigation.uncertainty.enumeration.ScenarioSelection;
 
 import dev.arcovia.mitigation.uncertainty.loading.LoadedUncertaintyModel;
 import dev.arcovia.mitigation.uncertainty.loading.UncertaintyModelLoader;

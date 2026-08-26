@@ -1,4 +1,7 @@
-package dev.arcovia.mitigation.uncertainty.loading;
+package dev.arcovia.mitigation.uncertainty.verification.loading;
+
+import dev.arcovia.mitigation.uncertainty.loading.UncertaintyModelLoader;
+import dev.arcovia.mitigation.uncertainty.loading.UncertaintyModelSpec;
 
 import org.junit.jupiter.api.Test;
 

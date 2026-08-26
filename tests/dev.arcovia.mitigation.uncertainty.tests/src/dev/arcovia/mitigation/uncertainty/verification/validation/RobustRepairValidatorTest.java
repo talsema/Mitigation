@@ -1,4 +1,7 @@
-package dev.arcovia.mitigation.uncertainty.validation;
+package dev.arcovia.mitigation.uncertainty.verification.validation;
+
+import dev.arcovia.mitigation.uncertainty.validation.RobustRepairValidationResult;
+import dev.arcovia.mitigation.uncertainty.validation.RobustRepairValidator;
 
 import dev.arcovia.mitigation.ilp.Constraint;
 import dev.arcovia.mitigation.uncertainty.loading.LoadedUncertaintyModel;

@@ -1,4 +1,6 @@
-package dev.arcovia.mitigation.uncertainty.pipeline;
+package dev.arcovia.mitigation.uncertainty.verification.pipeline;
+
+import dev.arcovia.mitigation.uncertainty.pipeline.ScenarioPreparationService;
 
 import dev.arcovia.mitigation.ilp.Constraint;
 import dev.arcovia.mitigation.uncertainty.loading.UncertaintyModelLoader;

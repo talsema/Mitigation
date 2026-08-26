@@ -1,4 +1,7 @@
-package dev.arcovia.mitigation.uncertainty.materialization;
+package dev.arcovia.mitigation.uncertainty.verification.materialization;
+
+import dev.arcovia.mitigation.uncertainty.materialization.MaterializedScenario;
+import dev.arcovia.mitigation.uncertainty.materialization.ScenarioMaterializer;
 
 import dev.abunai.confidentiality.analysis.core.UncertaintyUtils;
 import dev.arcovia.mitigation.uncertainty.enumeration.ScenarioSelection;
