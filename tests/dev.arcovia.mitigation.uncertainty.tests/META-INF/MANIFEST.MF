@@ -4,6 +4,7 @@ Bundle-Name: UncertaintyTests
 Bundle-SymbolicName: dev.arcovia.mitigation.uncertainty.tests
 Bundle-Version: 1.0.0.qualifier
 Import-Package: org.junit.jupiter.api;version="5.8.1",
+ org.junit.jupiter.api.condition;version="5.8.1",
  org.junit.jupiter.api.function;version="5.8.1",
  org.junit.jupiter.api.io;version="5.8.1",
  org.junit.jupiter.params;version="5.8.1",
@@ -21,6 +22,7 @@ Require-Bundle: dev.arcovia.mitigation.uncertainty,
  org.dataflowanalysis.dfd.dataflowdiagram,
  org.dataflowanalysis.examplemodels,
  org.apache.log4j,
+ com.fasterxml.jackson.core.jackson-databind;bundle-version="2.13.2",
  tools.mdsd.library.standalone.initialization
 Automatic-Module-Name: dev.arcovia.mitigation.uncertainty.tests
 Bundle-RequiredExecutionEnvironment: JavaSE-17
