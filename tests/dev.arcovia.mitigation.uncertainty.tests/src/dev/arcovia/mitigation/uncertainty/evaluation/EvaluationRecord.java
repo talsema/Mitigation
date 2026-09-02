@@ -54,41 +54,7 @@ public record EvaluationRecord(
     /**
      * The column order of {@code measurements.csv}, and the order {@link #toCsvRow()} emits.
      */
-    public static final List<String> COLUMNS = Arrays.stream(EvaluationRecord.class.getRecordComponents())
-            .map(EvaluationRecord::columnNameOf)
-            .toList();
-
-    /**
-     * Returns the column one record part is written under.
-     *
-     * @param component the record component
-     * @return its declared column name, or its name in snake case
-     */
-    private static String columnNameOf(RecordComponent component) {
-        JsonProperty declared = component.getAnnotation(JsonProperty.class);
-        if (declared == null) {
-            declared = component.getAccessor().getAnnotation(JsonProperty.class);
-        }
-        return declared != null ? declared.value() : snakeCase(component.getName());
-    }
-
-    /**
-     * Converts a camel-case component name to its snake-case column.
-     *
-     * @param name the component name
-     * @return the column name
-     */
-    private static String snakeCase(String name) {
-        StringBuilder column = new StringBuilder();
-        for (char character : name.toCharArray()) {
-            if (Character.isUpperCase(character)) {
-                column.append('_').append(Character.toLowerCase(character));
-            } else {
-                column.append(character);
-            }
-        }
-        return column.toString();
-    }
+    public static final List<String> COLUMNS = RecordCsv.columns(EvaluationRecord.class);
 
     /**
      * Validates the identifying fields, which every runner can supply.
