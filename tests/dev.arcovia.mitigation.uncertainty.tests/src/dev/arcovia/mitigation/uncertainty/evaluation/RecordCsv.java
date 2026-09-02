@@ -94,6 +94,9 @@ public final class RecordCsv {
         } catch (ReflectiveOperationException | SecurityException exception) {
             throw new IllegalStateException("Could not read " + component.getName(), exception);
         }
+        if (read == null) {
+            return "";
+        }
         if (read instanceof Double number) {
             return String.format(Locale.ROOT, "%.3f", number);
         }
