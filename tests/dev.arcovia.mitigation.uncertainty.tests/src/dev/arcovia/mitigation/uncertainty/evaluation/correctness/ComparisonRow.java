@@ -108,13 +108,13 @@ record ComparisonRow(
      */
     ComparisonVerdict verdict() {
         if (robust.outcome() != RepairOutcome.VALID_REPAIR) {
-            return ComparisonVerdict.robustFailure(robust.outcome());
+            return ComparisonVerdict.robustUnavailable(robust.outcome());
         } else if (nominal.validation().totalViolations() < 0) {
             return ComparisonVerdict.nominalUnavailable(nominal.outcome());
         } else if (nominal.nominalViolations() > 0) {
             return ComparisonVerdict.NOMINAL_DEFECT;
         } else if (nominal.validation().totalViolations() > 0) {
-            return ComparisonVerdict.TRANSFER_GAP;
+            return ComparisonVerdict.NOMINAL_INSUFFICIENT;
         }
         return ComparisonVerdict.NOMINAL_SUFFICIENT;
     }

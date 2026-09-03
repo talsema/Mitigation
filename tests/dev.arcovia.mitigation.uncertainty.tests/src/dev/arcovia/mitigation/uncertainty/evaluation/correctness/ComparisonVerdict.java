@@ -4,16 +4,16 @@ package dev.arcovia.mitigation.uncertainty.evaluation.correctness;
  * Names the outcome of a nominal-versus-robust comparison.
  *
  * @param kind  the comparison outcome
- * @param dueTo the repair outcome behind a failure verdict, or {@code null}
+ * @param dueTo the repair outcome behind a verdict where an arm produced no plan, or {@code null}
  */
 record ComparisonVerdict(Kind kind, RepairOutcome dueTo) {
 
     protected enum Kind {
         NOMINAL_SUFFICIENT("NOMINAL-SUFFICIENT"),
-        TRANSFER_GAP("TRANSFER-GAP"),
+        NOMINAL_INSUFFICIENT("NOMINAL-INSUFFICIENT"),
         NOMINAL_DEFECT("NOMINAL-DEFECT"),
         NOMINAL_UNAVAILABLE("NOMINAL-UNAVAILABLE"),
-        ROBUST_FAILED("ROBUST-FAILED");
+        ROBUST_UNAVAILABLE("ROBUST-UNAVAILABLE");
 
         private final String label;
 
@@ -23,16 +23,17 @@ record ComparisonVerdict(Kind kind, RepairOutcome dueTo) {
     }
 
     static final ComparisonVerdict NOMINAL_SUFFICIENT = new ComparisonVerdict(Kind.NOMINAL_SUFFICIENT, null);
-    static final ComparisonVerdict TRANSFER_GAP = new ComparisonVerdict(Kind.TRANSFER_GAP, null);
+
+    static final ComparisonVerdict NOMINAL_INSUFFICIENT = new ComparisonVerdict(Kind.NOMINAL_INSUFFICIENT, null);
+
     static final ComparisonVerdict NOMINAL_DEFECT = new ComparisonVerdict(Kind.NOMINAL_DEFECT, null);
 
     String label() {
         return dueTo == null ? kind.label : kind.label + "(" + dueTo + ")";
     }
 
-
-    static ComparisonVerdict robustFailure(RepairOutcome outcome) {
-        return new ComparisonVerdict(Kind.ROBUST_FAILED, outcome);
+    static ComparisonVerdict robustUnavailable(RepairOutcome outcome) {
+        return new ComparisonVerdict(Kind.ROBUST_UNAVAILABLE, outcome);
     }
 
     static ComparisonVerdict nominalUnavailable(RepairOutcome outcome) {

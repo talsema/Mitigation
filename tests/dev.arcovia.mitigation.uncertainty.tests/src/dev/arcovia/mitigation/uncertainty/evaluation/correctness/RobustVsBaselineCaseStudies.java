@@ -45,8 +45,6 @@ final class RobustVsBaselineCaseStudies {
         final Path externalModelFolder = projectDirectory.resolve("models").resolve("DFDExternalUncertaintyMitigation");
         final Path mitigationExampleFolder = projectDirectory.resolve("models").resolve("mitigation_example");
 
-        ComparisonVerdict verdict = ComparisonVerdict.robustFailure(RepairOutcome.NO_ROBUST_REPAIR);
-        ComparisonVerdict verdict1 = ComparisonVerdict.robustFailure(RepairOutcome.NO_ROBUST_REPAIR);
         return List.of(
                 new CaseStudy("Banking/ext (no uncertainty)",
                         dfd(externalModelFolder, "ext"),
@@ -76,31 +74,31 @@ final class RobustVsBaselineCaseStudies {
                         dfd(externalModelFolder, "ext"),
                         PERSONAL_NEVER_LEAVES_EU,
                         sources("Banking_Data_Location_Uncertain", "Transactions_DB_Location_Uncertain"),
-                        new CaseExpectation(verdict1, 4, "constructed latent control", "External")),
+                        new CaseExpectation(ComparisonVerdict.robustUnavailable(RepairOutcome.NO_ROBUST_REPAIR), 4, "constructed latent control", "External")),
 
                 new CaseStudy("Transactions/ext (LATENT only, 2 scn)",
                         dfd(externalModelFolder, "ext"),
                         PERSONAL_NEVER_LEAVES_EU,
                         sources("Transactions_DB_Location_Uncertain"),
-                        new CaseExpectation(verdict, 2, "constructed latent control", "External")),
+                        new CaseExpectation(ComparisonVerdict.robustUnavailable(RepairOutcome.NO_ROBUST_REPAIR), 2, "constructed latent control", "External")),
 
                 new CaseStudy("Transactions/ext + ENCRYPTION-escape (LATENT, 2 scn)",
                         dfd(externalModelFolder, "ext"),
                         PERSONAL_OUTSIDE_EU_MUST_BE_ENCRYPTED,
                         sources("Transactions_DB_Location_Uncertain"),
-                        new CaseExpectation(ComparisonVerdict.TRANSFER_GAP, 2, "constructed latent control", "External")),
+                        new CaseExpectation(ComparisonVerdict.NOMINAL_INSUFFICIENT, 2, "constructed latent control", "External")),
 
                 new CaseStudy("Banking+Transactions/ext + ENCRYPTION-escape (LATENT, 4 scn)",
                         dfd(externalModelFolder, "ext"),
                         PERSONAL_OUTSIDE_EU_MUST_BE_ENCRYPTED,
                         sources("Banking_Data_Location_Uncertain", "Transactions_DB_Location_Uncertain"),
-                        new CaseExpectation(ComparisonVerdict.TRANSFER_GAP, 4, "constructed interaction control", "External")),
+                        new CaseExpectation(ComparisonVerdict.NOMINAL_INSUFFICIENT, 4, "constructed interaction control", "External")),
 
                 new CaseStudy("mitigation_example (Personal; couples -> fallback)",
                         dfd(mitigationExampleFolder, "mitigation_example"),
                         PERSONAL_NEVER_LEAVES_EU,
                         nullUncertaintySourceFilter(),
-                        new CaseExpectation(ComparisonVerdict.TRANSFER_GAP, 32, "ARCoViA mitigation example", ALL_SOURCE_TYPES)),
+                        new CaseExpectation(ComparisonVerdict.NOMINAL_INSUFFICIENT, 32, "ARCoViA mitigation example", ALL_SOURCE_TYPES)),
 
                 new CaseStudy("mitigation_example (Public; no violation, 32 scn)",
                         dfd(mitigationExampleFolder, "mitigation_example"),
@@ -112,13 +110,13 @@ final class RobustVsBaselineCaseStudies {
                         dfd(koushikkothagalFolder, "koushikkothagal_0"),
                         UNAUTHENTICATED_NEVER_REACHES_INTERNAL,
                         nullUncertaintySourceFilter(),
-                        new CaseExpectation(ComparisonVerdict.TRANSFER_GAP, 2, MICROSECEND_ADAPTED, "External")),
+                        new CaseExpectation(ComparisonVerdict.NOMINAL_INSUFFICIENT, 2, MICROSECEND_ADAPTED, "External")),
 
                 new CaseStudy("microSecEnD koushikkothagal + C9 logging (MIXED, 2 scn)",
                         dfd(koushikkothagalFolder, "koushikkothagal_0"),
                         INTERNAL_MUST_LOG_LOCALLY,
                         nullUncertaintySourceFilter(),
-                        new CaseExpectation(ComparisonVerdict.TRANSFER_GAP, 2, MICROSECEND_ADAPTED, "External")),
+                        new CaseExpectation(ComparisonVerdict.NOMINAL_INSUFFICIENT, 2, MICROSECEND_ADAPTED, "External")),
 
                 new CaseStudy("microSecEnD jferrater + C3 auth (External, 2 scn)",
                         dfd(jferraterFolder, "jferrater"),
