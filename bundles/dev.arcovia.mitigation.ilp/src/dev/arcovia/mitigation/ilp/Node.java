@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import dev.arcovia.mitigation.cost.ActionType;
+
 import org.dataflowanalysis.analysis.core.AbstractTransposeFlowGraph;
 import org.dataflowanalysis.analysis.core.AbstractVertex;
 import org.dataflowanalysis.analysis.dfd.core.DFDVertex;
@@ -79,8 +81,7 @@ public class Node {
 					mitigations.addAll(getDataMitigations(mitigation, ActionType.Adding));
 				}
 				case DeleteNodeLabel -> {
-					if (!restrictedToAdding) {
-						mitigation.checkIfAllowed(vertex);
+					if (!restrictedToAdding && mitigation.checkIfAllowed(vertex)) {
 						mitigations.add(new Mitigation(new ActionTerm(this.name, mitigation.label, ActionType.Removing),
 								mitigation.cost, getAllRequiredMitigations(mitigation)));
 					}
@@ -146,7 +147,7 @@ public class Node {
 			Node node = new Node((DFDVertex) vertex, tfg);
 			mitigations
 					.add(new Mitigation(new ActionTerm(node.outgoingFlow.getId(), mitigation.label, ActionType.AddNode),
-							mitigation.cost - EPSILON, getAllRequiredMitigations(mitigation)));
+							Math.max(0.0, mitigation.cost - EPSILON), getAllRequiredMitigations(mitigation)));
 			mitigations.addAll(node.getNodeAdditionMitigations(mitigation));
 		}
 		return mitigations;
@@ -193,7 +194,8 @@ public class Node {
 
 			if (node.isForwarding) {
 				mitigations.addAll(node.getDataMitigations(
-						new MitigationStrategy(mitigation.label, mitigation.cost - EPSILON, MitigationType.DataLabel),
+						new MitigationStrategy(mitigation.label, Math.max(0.0, mitigation.cost - EPSILON),
+								MitigationType.DataLabel),
 						type));
 			}
 		}

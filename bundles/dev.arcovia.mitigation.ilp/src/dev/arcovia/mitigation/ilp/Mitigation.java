@@ -16,4 +16,9 @@ public record Mitigation(ActionTerm mitigation, double cost, List<List<Mitigatio
 
 		return this.mitigation().equals(m.mitigation());
 	}
+
+	@Override
+	public int hashCode() {
+		return mitigation.hashCode();
+	}
 }

@@ -1,11 +1,16 @@
 package dev.arcovia.mitigation.ilp;
 
+import dev.arcovia.mitigation.cost.ActionCostEvaluator;
+import dev.arcovia.mitigation.cost.ActionCostDescriptor;
+import dev.arcovia.mitigation.cost.RepairActionKey;
+import dev.arcovia.mitigation.cost.RepairCostSpecification;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Set;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.stream.Collectors;
 
 import dev.arcovia.mitigation.sat.BiMap;
 
@@ -13,7 +18,6 @@ import java.util.ArrayList;
 
 import com.google.ortools.Loader;
 import com.google.ortools.linearsolver.MPConstraint;
-import com.google.ortools.linearsolver.MPObjective;
 import com.google.ortools.linearsolver.MPSolver;
 import com.google.ortools.linearsolver.MPVariable;
 
@@ -21,6 +25,7 @@ import org.osgi.framework.Bundle;
 import org.osgi.framework.FrameworkUtil;
 
 import java.io.InputStream;
+import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,18 +34,47 @@ import java.nio.file.StandardCopyOption;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import org.dataflowanalysis.converter.dfd2web.DataFlowDiagramAndDictionary;
+
 public class ILPSolver {
 	private BiMap<MPVariable, Mitigation> mitigationMap = new BiMap<>();
 
+	/**
+	 * Solves a legacy action-only repair problem with the standard preference profile.
+	 *
+	 * @param mitigations coverage alternatives for each violation
+	 * @param allMitigations all candidate actions
+	 * @param contradictions mutually exclusive action sets
+	 * @return the selected actions, or {@code null} when no feasible solution exists
+	 * @throws Exception if SCIP cannot be initialized or solve the model
+	 */
 	public List<Mitigation> solve(List<List<Mitigation>> mitigations, Set<Mitigation> allMitigations,
-			List<List<Mitigation>> contradictions) throws Exception {
-		try {
-			loadOrToolsNative();
-		} catch (IOException e) {
-			throw new Exception("Unable to load required libariers used by google orTools");
+                                  List<List<Mitigation>> contradictions) throws Exception {
+		ILPSolverResult result = solveWithResult(mitigations, allMitigations, contradictions,
+				RepairCostSpecification.standardPreference(), null);
+		return result == null ? null : result.selectedMitigations();
+	}
 
-		}
+	/**
+	 * Solves a repair problem with the declared thesis cost specification.
+	 *
+	 * @param mitigations coverage alternatives for each violation
+	 * @param allMitigations all candidate actions
+	 * @param contradictions mutually exclusive action sets
+	 * @param costSpecification the direct and shared cost specification
+	 * @param baseModel the unrepaired model used for descriptors, or {@code null} for action-only profiles
+	 * @return the selected actions, status, and objective breakdown; {@code null} when infeasible
+	 * @throws Exception if SCIP cannot be initialized or solve the model
+	 */
+	public ILPSolverResult solveWithResult(List<List<Mitigation>> mitigations, Set<Mitigation> allMitigations,
+			List<List<Mitigation>> contradictions, RepairCostSpecification costSpecification,
+			DataFlowDiagramAndDictionary baseModel) throws Exception {
+		ensureNativeLibrariesLoaded();
 		MPSolver solver = MPSolver.createSolver("SCIP_MIXED_INTEGER_PROGRAMMING");
+		allMitigations = canonicalOrder(allMitigations);
+		mitigations = canonicalRows(mitigations);
+		contradictions = canonicalRows(contradictions);
+		mitigationMap = new BiMap<>();
 
 		for (Mitigation mitigation : allMitigations) {
 			MPVariable var = solver.makeIntVar(0, 1, mitigation.toString());
@@ -120,41 +154,24 @@ public class ILPSolver {
 
 		}
 
-		MPObjective objective = solver.objective();
-
-		for (var mitigation : allMitigations) {
-			objective.setCoefficient(mitigationMap.getKey(mitigation), mitigation.cost());
+		Map<RepairActionKey, MPVariable> actionVariables = new java.util.TreeMap<>();
+		for (Mitigation mitigation : allMitigations) {
+			actionVariables.put(RepairActionKeys.from(mitigation), mitigationMap.getKey(mitigation));
 		}
-
-		objective.setMinimization();
-
-		String lpModel = solver.exportModelAsLpFormat(false);
-		try (FileWriter writer = new FileWriter("model.lp")) {
-			writer.write(lpModel);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		Map<RepairActionKey, ActionCostDescriptor> actionCosts = new ActionCostEvaluator()
+				.evaluateAll(actionVariables.keySet(), costSpecification, baseModel);
+		CostObjectiveEncoder.ConfiguredObjective configuredObjective = new CostObjectiveEncoder()
+				.configure(solver, actionVariables, costSpecification, actionCosts);
 
 		MPSolver.ResultStatus status = solver.solve();
 
 		try {
 		    if (status == MPSolver.ResultStatus.OPTIMAL || status == MPSolver.ResultStatus.FEASIBLE) {
-	            List<Mitigation> chosen = new ArrayList<>();
-	            for (MPVariable variable : solver.variables()) {
-	                if (variable.solutionValue() > 0.5) {
-	                    // skip auxiliary variables introduced by required semantic
-	                    if (variable.name().startsWith("required_") || variable.name().startsWith("y_")) {
-	                        continue;
-	                    }
-
-	                    Optional<Mitigation> mitigation = allMitigations.stream()
-	                            .filter(m -> variable.name().equals(m.toString())).findFirst();
-	                    if (mitigation.isPresent()) {
-	                        chosen.add(mitigation.get());
-	                    }
-	                }
-	            }
-	            return chosen;
+	            List<Mitigation> chosen = allMitigations.stream()
+					.filter(mitigation -> mitigationMap.getKey(mitigation).solutionValue() > 0.5)
+					.sorted(Comparator.comparing(RepairActionKeys::from))
+					.toList();
+	            return new ILPSolverResult(chosen, status.name(), configuredObjective.selectedCostBreakdown());
 	        } else {
 	            System.out.println("No feasible solution: " + status);
 	            return null;
@@ -170,14 +187,41 @@ public class ILPSolver {
 		
 	}
 
+	/**
+	 * Orders candidate actions by their canonical key.
+	 *
+	 * @param mitigations the candidate actions in any order
+	 * @return the same actions, sorted by {@link RepairActionKey}
+	 */
+	static Set<Mitigation> canonicalOrder(Set<Mitigation> mitigations) {
+		return mitigations.stream()
+				.sorted(Comparator.comparing(RepairActionKeys::from))
+				.collect(Collectors.toCollection(LinkedHashSet::new));
+	}
+
+	/**
+	 * Orders constraint rows by their members' canonical keys, and each row's members likewise.
+	 *
+	 * @param rows the rows in any order
+	 * @return the rows and their members in canonical order
+	 */
+	public static List<List<Mitigation>> canonicalRows(List<List<Mitigation>> rows) {
+		return rows.stream()
+				.map(row -> row.stream().sorted(Comparator.comparing(RepairActionKeys::from)).toList())
+				.sorted(Comparator.comparing(row -> row.stream()
+						.map(mitigation -> RepairActionKeys.from(mitigation).stableId())
+						.collect(Collectors.joining("|"))))
+				.toList();
+	}
+
 	/***
 	 * Returns a string that is valid for LP/MPS export by: - replacing all
 	 * whitespace and illegal characters with _ - if only a number or an empty
 	 * string is used it is set to variable x_(number)
-	 * 
+	 *
 	 * @param s any arbitrary string
 	 * @return s
-	 * 
+	 *
 	 */
 	private static String safeName(String s) {
 		s = s.trim().replaceAll("\\s+", "_").replaceAll("[^A-Za-z0-9_]", "_");
@@ -188,6 +232,14 @@ public class ILPSolver {
 	}
 
 	private static volatile boolean nativeLoaded = false;
+
+	public static void ensureNativeLibrariesLoaded() {
+		try {
+			loadOrToolsNative();
+		} catch (IOException e) {
+			throw new IllegalStateException("Unable to load required libraries used by google orTools", e);
+		}
+	}
 
 	private static synchronized void loadOrToolsNative() throws IOException {
 		if (nativeLoaded) {

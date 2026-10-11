@@ -1,10 +1,14 @@
 package dev.arcovia.mitigation.ilp;
 
+import dev.arcovia.mitigation.cost.ActionType;
+import dev.arcovia.mitigation.cost.ObjectiveCostBreakdown;
+import dev.arcovia.mitigation.cost.RepairCostSpecification;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -51,7 +55,9 @@ public class OptimizationManager implements MitigationApproach{
 	private List<ActionTerm> actions;
 
 	private List<Mitigation> result;
-	
+	private RepairCostSpecification repairCostSpecification = RepairCostSpecification.standardPreference();
+	private ObjectiveCostBreakdown objectiveCostBreakdown;
+
 	private boolean isRestritedToLabelAddition = false;
 
 	public OptimizationManager(String dfdLocation, List<AnalysisConstraint> constraints) {
@@ -102,14 +108,18 @@ public class OptimizationManager implements MitigationApproach{
 				contradictions.addAll(determineContradictions(mitigation));
 			}
 		}
-		
+
 		//if no violation found return dfd
         if (mitigations.isEmpty()) {
+            recordEmptyRepair();
             return dfd;
         }
 
 		var solver = new ILPSolver();
-		result = solver.solve(mitigations, allMitigations, contradictions);
+		ILPSolverResult solverResult = solver.solveWithResult(mitigations, allMitigations, contradictions,
+				repairCostSpecification, dfd);
+		result = solverResult.selectedMitigations();
+		objectiveCostBreakdown = solverResult.costBreakdown();
 
 		actions = getActions(result);
 
@@ -137,16 +147,20 @@ public class OptimizationManager implements MitigationApproach{
 				contradictions.addAll(determineContradictions(mitigation));
 			}
 		}
-		
+
 		//if no violation found return dfd
         if (mitigations.isEmpty()) {
+        	recordEmptyRepair();
         	timer.solving();
         	timer.stop();
             return dfd;
         }
 
 		var solver = new ILPSolver();
-		result = solver.solve(mitigations, allMitigations, contradictions);
+		ILPSolverResult solverResult = solver.solveWithResult(mitigations, allMitigations, contradictions,
+				repairCostSpecification, dfd);
+		result = solverResult.selectedMitigations();
+		objectiveCostBreakdown = solverResult.costBreakdown();
 
 		timer.solving();
 
@@ -158,18 +172,71 @@ public class OptimizationManager implements MitigationApproach{
 
 		return dfd;
 	}
-	
+
 	@Override
 	public void restrictToLabelAddition() {
 		isRestritedToLabelAddition = true;
 	}
-	
+
+	/**
+	 * Sets the specification used by the next repair.
+	 *
+	 * @param repairCostSpecification the declared direct and shared repair costs
+	 */
+	public void setRepairCostSpecification(RepairCostSpecification repairCostSpecification) {
+		this.repairCostSpecification = java.util.Objects.requireNonNull(repairCostSpecification,
+				"repairCostSpecification must not be null");
+	}
+
+	/**
+	 * Returns the specification used by the next repair.
+	 *
+	 * @return the declared repair-cost specification
+	 */
+	public RepairCostSpecification getRepairCostSpecification() {
+		return repairCostSpecification;
+	}
+
+    /**
+     * Returns the objective breakdown of the most recent repair.
+     *
+     * @return the completed objective breakdown, or empty before a successful repair
+     */
+    public Optional<ObjectiveCostBreakdown> getObjectiveCostBreakdown() {
+        return Optional.ofNullable(objectiveCostBreakdown);
+    }
+
+	/**
+	 * Records the empty plan with objective 0 when no violation needs repair.
+	 */
+	private void recordEmptyRepair() {
+		result = List.of();
+		actions = List.of();
+		objectiveCostBreakdown = new ObjectiveCostBreakdown(repairCostSpecification.id(),
+				repairCostSpecification.version(), repairCostSpecification.unit(), List.of(), List.of(), 0, 0, 0);
+	}
+
+	/**
+	 * Returns the objective value of the most recent repair.
+	 *
+	 * @return the declared \(J_\Theta\) value
+	 * @throws IllegalStateException if no repair has completed
+	 */
+	public double getObjectiveValue() {
+		return getObjectiveCostBreakdown().orElseThrow(
+				() -> new IllegalStateException("No repair objective is available before a successful repair"))
+				.objectiveValue();
+	}
+
+	/**
+	 * Returns the legacy integer projection of the objective value.
+	 *
+	 * @return the truncated legacy total
+	 * @deprecated use {@link #getObjectiveValue()} instead
+	 */
+	@Deprecated
 	public int getCost() {
-		int cost = 0;
-		for (var mitigation : result) {
-			cost += mitigation.cost();
-		}
-		return cost;
+		return (int) getObjectiveValue();
 	}
 
 	public boolean isViolationFree(DataFlowDiagramAndDictionary dfd) {
@@ -262,7 +329,9 @@ public class OptimizationManager implements MitigationApproach{
 	private void setAdditonalConstraints(MitigationStrategy mitigation) {
 		for (var constraint : constraints) {
 			for (var mit : constraint.getMitigations()) {
-				if (!mitigation.type.toString().startsWith("Delete") && mit.label.equals(mitigation.label)) {
+				// The delete-typed strategy is not allowed where another constraint's
+				// addition-typed strategy needs the same labels: compare the OTHER strategy.
+				if (!mit.type.toString().startsWith("Delete") && mit.label.equals(mitigation.label)) {
 					mitigation.addConstraint(constraint);
 				}
 			}
@@ -349,7 +418,7 @@ public class OptimizationManager implements MitigationApproach{
 		}
 	}
 
-	private void applyActions(DataFlowDiagramAndDictionary dfd, List<ActionTerm> actions) {
+	protected void applyActions(DataFlowDiagramAndDictionary dfd, List<ActionTerm> actions) {
 		deriveOutPinsToAssignmentsMap(dfd);
 
 		addAndRemoveLabels(dfd, actions);
@@ -470,7 +539,7 @@ public class OptimizationManager implements MitigationApproach{
 
 				var name = action.compositeLabels().get(0).label().value();
 
-				
+
 				var dfdFactory = dataflowdiagramFactory.eINSTANCE;
 
 				var vertex = dfdFactory.createProcess();
@@ -827,11 +896,8 @@ public class OptimizationManager implements MitigationApproach{
 	}
 
 	private void deriveOutPinsToAssignmentsMap(DataFlowDiagramAndDictionary dfd) {
-		for (var node : dfd.dataFlowDiagram().getNodes()) {
-			for (var assignment : node.getBehavior().getAssignment()) {
-				var outPin = assignment.getOutputPin();
-				outPinToAssignmentMap.put(outPin.getId(), assignment.getId());
-			}
-		}
+		dfd.dataFlowDiagram().getNodes().stream()
+				.flatMap(n -> n.getBehavior().getAssignment().stream())
+				.forEach(a -> outPinToAssignmentMap.put(a.getOutputPin().getId(), a.getId()));
 	}
 }

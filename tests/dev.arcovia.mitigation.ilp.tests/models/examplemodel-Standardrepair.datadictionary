@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="ASCII"?>
+<datadictionary:DataDictionary xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:datadictionary="http://dataflowanalysis.org/dfd/datadictionary" id="_ezaUwWX6EfGsQoK6pGGFhA">
+  <labelTypes id="4h3wzk" entityName="Sensitivity">
+    <label id="zzvphn" entityName="Personal"/>
+    <label id="veaan9" entityName="Public"/>
+  </labelTypes>
+  <labelTypes id="gvia09" entityName="Location">
+    <label id="g10hr" entityName="EU"/>
+    <label id="5hnugm" entityName="nonEU"/>
+  </labelTypes>
+  <labelTypes id="84rllz" entityName="Encryption">
+    <label id="2r6xe6" entityName="Encrypted"/>
+    <label id="5031e998-9ae1-3b3b-a509-b7d4220c0ddf" entityName="encrypted"/>
+  </labelTypes>
+  <labelTypes id="dyw688" entityName="User">
+    <label id="fceady" entityName="user"/>
+    <label id="0ffb8" entityName="admin"/>
+  </labelTypes>
+  <labelTypes id="e835yt" entityName="Data">
+    <label id="80smq" entityName="request"/>
+    <label id="vyroej" entityName="response"/>
+    <label id="sggpp" entityName="configuration"/>
+    <label id="grccy6" entityName="personal"/>
+  </labelTypes>
+  <labelTypes id="lw0ew35" entityName="Stereotype">
+    <label id="mo8hoo" entityName="internal"/>
+    <label id="exjpgu" entityName="entrypoint"/>
+    <label id="q4up6j" entityName="Storage"/>
+    <label id="0fac8e8a-a38d-3e28-96ac-67f5d5f8fee9" entityName="local_logging"/>
+    <label id="1bda72ae-9223-39cb-9607-a8067798e736" entityName="log_sanitization"/>
+    <label id="8ab7aa02-d13e-363c-b9c7-168a812039ae" entityName="authenticated_request"/>
+    <label id="4a6883fd-dc01-3d50-a09d-8304b6337173" entityName="auth_server"/>
+    <label id="d283cec3-a227-3b75-8289-5d7054ec866d" entityName="logging_server"/>
+  </labelTypes>
+  <behavior id="_eza742X6EfGsQoK6pGGFhA" entityName="Storage">
+    <inPin id="973q3n" entityName="Storage_in_admin-consolestore"/>
+  </behavior>
+  <behavior id="_eza75mX6EfGsQoK6pGGFhA" entityName="Service_registry">
+    <inPin id="10glpd" entityName="Service_registry_in_User_requestconfiguration"/>
+    <outPin id="j4x2yf" entityName="Service_registry_out_"/>
+    <outPin id="l2sixh" entityName="Service_registry_out_store"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8FWX6EfGsQoK6pGGFhA" outputPin="j4x2yf" outputLabels="vyroej"/>
+    <assignment xsi:type="datadictionary:ForwardingAssignment" id="_eza8FmX6EfGsQoK6pGGFhA" outputPin="l2sixh" inputPins="10glpd"/>
+  </behavior>
+  <behavior id="_eza762X6EfGsQoK6pGGFhA" entityName="user_service">
+    <inPin id="s3ki79" entityName="user_service_in_processconfiguration"/>
+    <outPin id="lbbv1m" entityName="user_service_out_"/>
+    <outPin id="_ezl69WX6EfGsQoK6pGGFhA"/>
+    <assignment xsi:type="datadictionary:ForwardingAssignment" id="_eza8F2X6EfGsQoK6pGGFhA" outputPin="lbbv1m" inputPins="s3ki79"/>
+    <assignment xsi:type="datadictionary:ForwardingAssignment" id="_ezl69mX6EfGsQoK6pGGFhA" outputPin="_ezl69WX6EfGsQoK6pGGFhA" inputPins="s3ki79"/>
+  </behavior>
+  <behavior id="_eza772X6EfGsQoK6pGGFhA" entityName="User">
+    <inPin id="7cjz1n" entityName="User_in_"/>
+    <outPin id="0u4cim" entityName="User_out_User_request"/>
+    <outPin id="qiyh9m" entityName="User_out_process"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8D2X6EfGsQoK6pGGFhA" outputPin="0u4cim" outputLabels="fceady"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8EGX6EfGsQoK6pGGFhA" outputPin="0u4cim" outputLabels="80smq"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8EWX6EfGsQoK6pGGFhA" outputPin="0u4cim" outputLabels="exjpgu"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8EmX6EfGsQoK6pGGFhA" outputPin="qiyh9m" outputLabels="grccy6"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8E2X6EfGsQoK6pGGFhA" outputPin="qiyh9m" outputLabels="fceady"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8FGX6EfGsQoK6pGGFhA" outputPin="qiyh9m" outputLabels="exjpgu 8ab7aa02-d13e-363c-b9c7-168a812039ae"/>
+  </behavior>
+  <behavior id="_eza79GX6EfGsQoK6pGGFhA" entityName="configuration_server">
+    <inPin id="5eeix" entityName="configuration_server_in_admin"/>
+    <outPin id="0cmgr" entityName="configuration_server_out_configuration"/>
+    <outPin id="jllj9" entityName="configuration_server_out_configuration"/>
+    <outPin id="_ezlT72X6EfGsQoK6pGGFhA"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8DWX6EfGsQoK6pGGFhA" outputPin="0cmgr" outputLabels="sggpp"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8DmX6EfGsQoK6pGGFhA" outputPin="jllj9" outputLabels="sggpp 8ab7aa02-d13e-363c-b9c7-168a812039ae"/>
+    <assignment xsi:type="datadictionary:Assignment" id="_ezlT8GX6EfGsQoK6pGGFhA" outputPin="_ezlT72X6EfGsQoK6pGGFhA" outputLabels="8ab7aa02-d13e-363c-b9c7-168a812039ae sggpp">
+      <term xsi:type="datadictionary:TRUE" id="_ezl68GX6EfGsQoK6pGGFhA"/>
+    </assignment>
+  </behavior>
+  <behavior id="_eza7-WX6EfGsQoK6pGGFhA" entityName="admin_console">
+    <inPin id="3fbuli" entityName="admin_console_in_admin"/>
+    <outPin id="_ezl68mX6EfGsQoK6pGGFhA"/>
+    <assignment xsi:type="datadictionary:ForwardingAssignment" id="_ezl682X6EfGsQoK6pGGFhA" outputPin="_ezl68mX6EfGsQoK6pGGFhA" inputPins="3fbuli"/>
+  </behavior>
+  <behavior id="_eza7_WX6EfGsQoK6pGGFhA" entityName="Admin">
+    <outPin id="dwh5sd" entityName="Admin_out_admin"/>
+    <outPin id="rc2o8d" entityName="Admin_out_admin"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8CmX6EfGsQoK6pGGFhA" outputPin="rc2o8d" outputLabels="0ffb8 5031e998-9ae1-3b3b-a509-b7d4220c0ddf 8ab7aa02-d13e-363c-b9c7-168a812039ae"/>
+    <assignment xsi:type="datadictionary:SetAssignment" id="_eza8C2X6EfGsQoK6pGGFhA" outputPin="dwh5sd" outputLabels="0ffb8 5031e998-9ae1-3b3b-a509-b7d4220c0ddf 8ab7aa02-d13e-363c-b9c7-168a812039ae"/>
+  </behavior>
+  <behavior id="_ezlT5WX6EfGsQoK6pGGFhA">
+    <inPin id="_ezlT5mX6EfGsQoK6pGGFhA"/>
+    <outPin id="_ezlT52X6EfGsQoK6pGGFhA"/>
+    <assignment xsi:type="datadictionary:ForwardingAssignment" id="_ezlT6GX6EfGsQoK6pGGFhA" outputPin="_ezlT52X6EfGsQoK6pGGFhA" inputPins="_ezlT5mX6EfGsQoK6pGGFhA"/>
+  </behavior>
+  <behavior id="_ezlT62X6EfGsQoK6pGGFhA">
+    <inPin id="_ezlT7GX6EfGsQoK6pGGFhA"/>
+  </behavior>
+</datadictionary:DataDictionary>
